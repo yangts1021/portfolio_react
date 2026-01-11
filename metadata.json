@@ -1,0 +1,5 @@
+{
+  "name": "MyPortfolio Tracker Pro",
+  "description": "A comprehensive investment portfolio and transaction tracking application with Google Sheets synchronization, asset allocation analysis, and liability management.",
+  "requestFramePermissions": []
+}
