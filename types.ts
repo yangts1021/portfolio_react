@@ -1,4 +1,3 @@
-
 export type ActionType = 'BUY' | 'SELL';
 export type CurrencyType = 'TWD' | 'USD' | 'HKD' | 'JPY';
 export type TabType = 'transactions' | 'overview' | 'bank' | 'pledge';

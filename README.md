@@ -1,20 +1,70 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
-</div>
+# Portfolio React
 
-# Run and deploy your AI Studio app
+This is a personal portfolio website built with React, Vite, and TypeScript.
 
-This contains everything you need to run your app locally.
+## Features
 
-View your app in AI Studio: https://ai.studio/apps/drive/1tDWlP4YAUOYuucS6U4kPgV0unJt2kvv-
+- **React 19** with **Vite** for fast development.
+- **TypeScript** for type safety.
+- **ESLint** & **Prettier** for code quality.
+- **Recharts** for data visualization.
+- **GitHub Actions** for automatic deployment to GitHub Pages.
 
-## Run Locally
+## Getting Started
 
-**Prerequisites:**  Node.js
+### Prerequisites
 
+- Node.js (v18 or higher recommended)
+- npm
 
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+### Installation
+
+1. Clone the repository:
+
+   ```bash
+   git clone <repository-url>
+   cd portfolio_react
+   ```
+
+2. Install dependencies:
+   ```bash
+   npm install
+   ```
+
+## Development
+
+To start the development server:
+
+```bash
+npm run dev
+```
+
+Open [http://localhost:5173](http://localhost:5173) in your browser.
+
+## Scripts
+
+- `npm run dev`: Start dev server.
+- `npm run build`: Build for production.
+- `npm run preview`: Preview the production build locally.
+- `npm run lint`: Run ESLint to check for code quality issues.
+- `npm run format`: Auto-format code with Prettier.
+- `npm run deploy`: Deploy the app to GitHub Pages (gh-pages branch).
+
+## Deployment
+
+This project is configured to automatically deploy to GitHub Pages when changes are pushed to the `main` branch.
+
+To manually deploy:
+
+```bash
+npm run deploy
+```
+
+## Folder Structure
+
+- `src/`: Source code
+  - `components/`: Reusable React components
+  - `utils/`: Utility functions
+- `public/`: Static assets
+- `.github/workflows/`: CI/CD configurations
+- `dist/`: Production build output (created after build)

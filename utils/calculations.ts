@@ -1,4 +1,3 @@
-
 import { Transaction, PortfolioItem, ExchangeRates } from '../types';
 
 export const getCategoryFromBeta = (beta: number): string => {
@@ -7,7 +6,10 @@ export const getCategoryFromBeta = (beta: number): string => {
   return '原型';
 };
 
-export const formatMoney = (num: number | undefined | null, options: Intl.NumberFormatOptions = {}): string => {
+export const formatMoney = (
+  num: number | undefined | null,
+  options: Intl.NumberFormatOptions = {},
+): string => {
   if (num === undefined || num === null) return '0';
   const defaultOptions = { minimumFractionDigits: 0, maximumFractionDigits: 2 };
   return num.toLocaleString(undefined, { ...defaultOptions, ...options });
@@ -23,14 +25,16 @@ export const calculatePortfolio = (
   transactions: Transaction[],
   currentPrices: Record<string, number>,
   symbolBetas: Record<string, number>,
-  exchangeRates: ExchangeRates
+  exchangeRates: ExchangeRates,
 ) => {
   const portfolio: Record<string, PortfolioItem> = {};
 
   // Sort by date to ensure accurate average cost calculation
-  const sortedTx = [...transactions].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+  const sortedTx = [...transactions].sort(
+    (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime(),
+  );
 
-  sortedTx.forEach(tx => {
+  sortedTx.forEach((tx) => {
     if (!portfolio[tx.symbol]) {
       const beta = symbolBetas[tx.symbol] ?? 1.0;
       portfolio[tx.symbol] = {
@@ -51,21 +55,21 @@ export const calculatePortfolio = (
         unrealizedPnLTWD: 0,
         roi: 0,
         marketValueTWD: 0,
-        allocation: 0
+        allocation: 0,
       };
     }
 
     const p = portfolio[tx.symbol];
     if (tx.action === 'BUY') {
       p.inventory += tx.qty;
-      p.totalCost += (tx.qty * tx.price);
+      p.totalCost += tx.qty * tx.price;
       p.totalBuyQty += tx.qty;
-      p.totalBuyAmt += (tx.qty * tx.price);
+      p.totalBuyAmt += tx.qty * tx.price;
       if (p.inventory > 0) p.avgCost = p.totalCost / p.inventory;
     } else if (tx.action === 'SELL') {
       const costBasis = p.avgCost * tx.qty;
       const revenue = tx.price * tx.qty;
-      p.realizedPnL += (revenue - costBasis);
+      p.realizedPnL += revenue - costBasis;
       p.inventory -= tx.qty;
       p.totalCost -= costBasis;
       p.soldQty += tx.qty;
@@ -77,7 +81,7 @@ export const calculatePortfolio = (
     }
   });
 
-  const items = Object.values(portfolio).map(p => {
+  const items = Object.values(portfolio).map((p) => {
     const currentPrice = currentPrices[p.symbol] ?? p.avgCost; // Fallback to avgCost if no price
     const marketValue = p.inventory * currentPrice;
     const unrealizedPnL = marketValue - p.totalCost;
@@ -86,7 +90,15 @@ export const calculatePortfolio = (
     const marketValueTWD = marketValue * rate;
     const unrealizedPnLTWD = unrealizedPnL * rate;
 
-    return { ...p, currentPrice, marketValue, unrealizedPnL, unrealizedPnLTWD, roi, marketValueTWD };
+    return {
+      ...p,
+      currentPrice,
+      marketValue,
+      unrealizedPnL,
+      unrealizedPnLTWD,
+      roi,
+      marketValueTWD,
+    };
   });
 
   return items;
