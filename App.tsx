@@ -126,17 +126,32 @@ const App: React.FC = () => {
         if (json.error) throw new Error(json.error);
 
         if (json.transactions) {
-          const formattedTx = json.transactions.map((row: any, index: number) => ({
-            id: Date.now() + index,
-            date: row.date?.split('T')[0] || row.date,
-            action:
-              row.action === '賣' || row.action === 'SELL' || row.action === 'S' ? 'SELL' : 'BUY',
-            symbol: String(row.symbol).toUpperCase(),
-            broker: row.broker,
-            qty: parseFloat(row.qty),
-            price: parseFloat(row.price),
-            currency: row.currency || 'TWD',
-          }));
+          const formattedTx = json.transactions.map((row: any, index: number) => {
+            // Normalize date to YYYY-MM-DD
+            let dateStr = row.date;
+            if (dateStr) {
+              try {
+                const d = new Date(dateStr);
+                if (!isNaN(d.getTime())) {
+                  dateStr = d.toLocaleDateString('en-CA'); // YYYY-MM-DD
+                }
+              } catch (e) {
+                console.warn('Date parse error', row.date);
+              }
+            }
+
+            return {
+              id: Date.now() + index,
+              date: dateStr,
+              action:
+                row.action === '賣' || row.action === 'SELL' || row.action === 'S' ? 'SELL' : 'BUY',
+              symbol: String(row.symbol).toUpperCase(),
+              broker: row.broker,
+              qty: parseFloat(row.qty),
+              price: parseFloat(row.price),
+              currency: row.currency || 'TWD',
+            };
+          });
           setTransactions(formattedTx);
         }
 

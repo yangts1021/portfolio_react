@@ -16,7 +16,8 @@ const TransactionsTab: React.FC<TransactionsTabProps> = ({
   showToast,
 }) => {
   const [form, setForm] = useState({
-    date: new Date().toISOString().split('T')[0],
+    // Use local date string (YYYY-MM-DD)
+    date: new Date().toLocaleDateString('en-CA'), // en-CA gives YYYY-MM-DD
     action: 'BUY' as ActionType,
     symbol: '',
     broker: BROKERS[0],
@@ -25,10 +26,25 @@ const TransactionsTab: React.FC<TransactionsTabProps> = ({
     currency: 'TWD' as CurrencyType,
   });
   const [loading, setLoading] = useState(false);
+  const [showAll, setShowAll] = useState(false);
+
+  // Sorting and Filtering Logic
+  const sortedTransactions = [...transactions].sort((a, b) => {
+    // Robust sort using timestamps to handle mixed formats like '2026-01-13' and '2026/1/13'
+    return new Date(b.date).getTime() - new Date(a.date).getTime();
+  });
+
+  // Always show recent 30 transactions to ensure visibility
+  const recentTransactions = sortedTransactions.slice(0, 30);
+  const hasOlderRecords = sortedTransactions.length > recentTransactions.length;
+  const displayTransactions = showAll ? sortedTransactions : recentTransactions;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.symbol || !form.qty || !form.price) return;
+
+    const qty = parseFloat(form.qty.replace(/,/g, ''));
+    const price = parseFloat(form.price.replace(/,/g, ''));
 
     const newTx: Transaction = {
       id: Date.now(),
@@ -36,8 +52,8 @@ const TransactionsTab: React.FC<TransactionsTabProps> = ({
       action: form.action,
       symbol: form.symbol.toUpperCase().trim(),
       broker: form.broker,
-      qty: parseFloat(form.qty),
-      price: parseFloat(form.price),
+      qty: qty,
+      price: price,
       currency: form.currency,
     };
 
@@ -65,6 +81,21 @@ const TransactionsTab: React.FC<TransactionsTabProps> = ({
       }
     } else {
       showToast('已新增紀錄');
+    }
+  };
+
+  const handleNumberChange = (field: 'qty' | 'price', value: string) => {
+    // Remove existing commas
+    const rawValue = value.replace(/,/g, '');
+
+    // Check if it's a valid number part (allows partial inputs like "1." or "")
+    if (rawValue === '' || /^\d*\.?\d*$/.test(rawValue)) {
+      // Format with commas for display
+      const parts = rawValue.split('.');
+      parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+      const formatted = parts.join('.');
+
+      setForm((prev) => ({ ...prev, [field]: formatted }));
     }
   };
 
@@ -147,12 +178,13 @@ const TransactionsTab: React.FC<TransactionsTabProps> = ({
                   股數
                 </label>
                 <input
-                  type='number'
-                  step='any'
+                  type='text'
+                  inputMode='decimal'
                   value={form.qty}
-                  onChange={(e) => setForm({ ...form, qty: e.target.value })}
+                  onChange={(e) => handleNumberChange('qty', e.target.value)}
                   required
-                  className='w-full bg-gray-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg p-2.5 text-sm dark:text-white'
+                  placeholder='0'
+                  className='w-full bg-gray-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg p-2.5 text-sm dark:text-white font-mono'
                 />
               </div>
               <div>
@@ -160,12 +192,13 @@ const TransactionsTab: React.FC<TransactionsTabProps> = ({
                   成交單價
                 </label>
                 <input
-                  type='number'
-                  step='any'
+                  type='text'
+                  inputMode='decimal'
                   value={form.price}
-                  onChange={(e) => setForm({ ...form, price: e.target.value })}
+                  onChange={(e) => handleNumberChange('price', e.target.value)}
                   required
-                  className='w-full bg-gray-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg p-2.5 text-sm dark:text-white'
+                  placeholder='0.00'
+                  className='w-full bg-gray-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg p-2.5 text-sm dark:text-white font-mono'
                 />
               </div>
             </div>
@@ -218,7 +251,7 @@ const TransactionsTab: React.FC<TransactionsTabProps> = ({
                 </tr>
               </thead>
               <tbody className='divide-y divide-gray-100 dark:divide-gray-800'>
-                {transactions.map((tx) => (
+                {displayTransactions.map((tx) => (
                   <tr
                     key={tx.id}
                     className='bg-white dark:bg-gray-900 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors'
@@ -265,6 +298,26 @@ const TransactionsTab: React.FC<TransactionsTabProps> = ({
               <div className='p-10 text-center text-gray-400 dark:text-gray-600'>
                 <i className='fa-solid fa-receipt text-4xl mb-3'></i>
                 <p>目前沒有交易紀錄</p>
+              </div>
+            )}
+
+            {/* Expand/Collapse Button */}
+            {hasOlderRecords && (
+              <div className='p-4 text-center border-t border-gray-100 dark:border-gray-800'>
+                <button
+                  onClick={() => setShowAll(!showAll)}
+                  className='text-sm text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 font-medium transition-colors flex items-center justify-center gap-2 mx-auto'
+                >
+                  {showAll ? (
+                    <>
+                      <i className='fa-solid fa-chevron-up'></i> 收合較早的紀錄
+                    </>
+                  ) : (
+                    <>
+                      <i className='fa-solid fa-clock-rotate-left'></i> 查看所有紀錄 ({sortedTransactions.length} 筆)
+                    </>
+                  )}
+                </button>
               </div>
             )}
           </div>
