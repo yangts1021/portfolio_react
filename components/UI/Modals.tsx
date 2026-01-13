@@ -1,7 +1,7 @@
 import React from 'react';
 
 interface AlertModalProps {
-  config: { title: string; message: string; json?: any } | null;
+  config: { title: string; message: string; json?: unknown } | null;
   onClose: () => void;
 }
 

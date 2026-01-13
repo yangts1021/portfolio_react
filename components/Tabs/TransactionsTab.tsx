@@ -314,7 +314,8 @@ const TransactionsTab: React.FC<TransactionsTabProps> = ({
                     </>
                   ) : (
                     <>
-                      <i className='fa-solid fa-clock-rotate-left'></i> 查看所有紀錄 ({sortedTransactions.length} 筆)
+                      <i className='fa-solid fa-clock-rotate-left'></i> 查看所有紀錄 (
+                      {sortedTransactions.length} 筆)
                     </>
                   )}
                 </button>
