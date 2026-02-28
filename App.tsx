@@ -207,6 +207,7 @@ const App: React.FC = () => {
             qty: parseFloat(row.qty) || 0,
             avgCost: parseFloat(row.avgCost) || 0,
             currentPrice: parseFloat(row.currentPrice) || 0,
+            account: row.account || '',
           }));
           setPionexData(formattedPionex);
         }

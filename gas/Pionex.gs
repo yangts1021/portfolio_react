@@ -1,7 +1,8 @@
 /**
  * Pionex API 串接模組
- * API Key/Secret 需在 GAS 編輯器 > 專案設定 > 指令碼屬性中設定：
- *   PIONEX_API_KEY, PIONEX_API_SECRET
+ * Script Properties 需設定：
+ *   PIONEX_API_KEY_RICK, PIONEX_API_SECRET_RICK
+ *   PIONEX_API_KEY_JENNIFER, PIONEX_API_SECRET_JENNIFER
  */
 
 /**
@@ -12,19 +13,17 @@ function getPionexSignature(method, path, timestamp, secret) {
   var signature = Utilities.computeHmacSha256Signature(stringToSign, secret);
   return signature
     .map(function (b) {
-      return ('0' + ((b < 0 ? b + 256 : b).toString(16))).slice(-2);
+      return ('0' + (b < 0 ? b + 256 : b).toString(16)).slice(-2);
     })
     .join('');
 }
 
 /**
  * 呼叫 GET /api/v1/account/balances，回傳餘額 > 0 的幣種
+ * @param {string} apiKey - Pionex API Key
+ * @param {string} secret - Pionex API Secret
  */
-function fetchPionexBalances() {
-  var props = PropertiesService.getScriptProperties();
-  var apiKey = props.getProperty('PIONEX_API_KEY');
-  var secret = props.getProperty('PIONEX_API_SECRET');
-
+function fetchPionexBalances(apiKey, secret) {
   if (!apiKey || !secret) {
     throw new Error('PIONEX_API_KEY 或 PIONEX_API_SECRET 未設定');
   }
@@ -77,21 +76,45 @@ function fetchPionexTickers() {
 }
 
 /**
- * 整合 balances + tickers，寫入「Pionex」工作表
+ * 整合兩個帳戶的 balances + tickers，寫入「Pionex」工作表
  */
 function syncPionexData() {
-  var balances = fetchPionexBalances();
+  var props = PropertiesService.getScriptProperties();
   var prices = fetchPionexTickers();
 
-  var result = balances.map(function (b) {
-    var coin = b.coin;
-    var qty = parseFloat(b.free) + parseFloat(b.frozen);
-    return {
-      coin: coin,
-      qty: qty,
-      avgCost: 0,
-      currentPrice: prices[coin] || 0,
-    };
+  var accounts = [
+    {
+      name: 'Rick',
+      apiKey: props.getProperty('PIONEX_API_KEY_RICK'),
+      secret: props.getProperty('PIONEX_API_SECRET_RICK'),
+    },
+    {
+      name: 'Jennifer',
+      apiKey: props.getProperty('PIONEX_API_KEY_JENNIFER'),
+      secret: props.getProperty('PIONEX_API_SECRET_JENNIFER'),
+    },
+  ];
+
+  var allResults = [];
+
+  accounts.forEach(function (acc) {
+    if (!acc.apiKey || !acc.secret) {
+      Logger.log('跳過帳戶 ' + acc.name + '：API Key 未設定');
+      return;
+    }
+
+    var balances = fetchPionexBalances(acc.apiKey, acc.secret);
+    balances.forEach(function (b) {
+      var coin = b.coin;
+      var qty = parseFloat(b.free) + parseFloat(b.frozen);
+      allResults.push({
+        account: acc.name,
+        coin: coin,
+        qty: qty,
+        avgCost: 0,
+        currentPrice: prices[coin] || 0,
+      });
+    });
   });
 
   // 寫入 Pionex 工作表
@@ -99,23 +122,23 @@ function syncPionexData() {
   var sheet = ss.getSheetByName('Pionex');
   if (!sheet) {
     sheet = ss.insertSheet('Pionex');
-    sheet.getRange(1, 1, 1, 4).setValues([['coin', 'qty', 'avgCost', 'currentPrice']]);
+    sheet.getRange(1, 1, 1, 5).setValues([['account', 'coin', 'qty', 'avgCost', 'currentPrice']]);
   }
 
   // 清除舊資料（保留標題列）
   if (sheet.getLastRow() > 1) {
-    sheet.getRange(2, 1, sheet.getLastRow() - 1, 4).clearContent();
+    sheet.getRange(2, 1, sheet.getLastRow() - 1, 5).clearContent();
   }
 
   // 寫入新資料
-  if (result.length > 0) {
-    var rows = result.map(function (item) {
-      return [item.coin, item.qty, item.avgCost, item.currentPrice];
+  if (allResults.length > 0) {
+    var rows = allResults.map(function (item) {
+      return [item.account, item.coin, item.qty, item.avgCost, item.currentPrice];
     });
-    sheet.getRange(2, 1, rows.length, 4).setValues(rows);
+    sheet.getRange(2, 1, rows.length, 5).setValues(rows);
   }
 
-  return result;
+  return allResults;
 }
 
 /**
@@ -128,16 +151,17 @@ function readPionexFromSheet() {
     return [];
   }
 
-  var data = sheet.getRange(2, 1, sheet.getLastRow() - 1, 4).getValues();
+  var data = sheet.getRange(2, 1, sheet.getLastRow() - 1, 5).getValues();
   var list = [];
   for (var i = 0; i < data.length; i++) {
     var row = data[i];
-    if (row[0] === '') continue;
+    if (row[1] === '') continue;
     list.push({
-      coin: row[0],
-      qty: row[1],
-      avgCost: row[2],
-      currentPrice: row[3],
+      account: row[0],
+      coin: row[1],
+      qty: row[2],
+      avgCost: row[3],
+      currentPrice: row[4],
     });
   }
   return list;

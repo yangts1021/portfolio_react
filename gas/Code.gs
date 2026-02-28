@@ -107,11 +107,11 @@ function doGet(e) {
     }
 
     return ContentService.createTextOutput(JSON.stringify(result)).setMimeType(
-      ContentService.MimeType.JSON
+      ContentService.MimeType.JSON,
     );
   } catch (error) {
     return ContentService.createTextOutput(JSON.stringify({ error: error.toString() })).setMimeType(
-      ContentService.MimeType.JSON
+      ContentService.MimeType.JSON,
     );
   }
 }
@@ -151,8 +151,7 @@ function doPost(e) {
     // === 新增質押紀錄 ===
     else if (data.type === 'addPledge') {
       var sheet = ss.getSheetByName('質押借貸資料');
-      if (!sheet)
-        return ContentService.createTextOutput("Error: Sheet '質押借貸資料' not found.");
+      if (!sheet) return ContentService.createTextOutput("Error: Sheet '質押借貸資料' not found.");
 
       // 處理代碼格式：強制加上單引號
       var symbolStr = String(data.symbol);
@@ -161,10 +160,7 @@ function doPost(e) {
       }
 
       // 找出下一列：計算 A 欄 (匯撥日期) 有值的列數 + 1
-      var lastRow = sheet
-        .getRange('A1:A')
-        .getValues()
-        .filter(String).length;
+      var lastRow = sheet.getRange('A1:A').getValues().filter(String).length;
       var nextRow = lastRow + 1;
 
       // 使用 setValues 精確寫入 A~I 欄（E 欄留空給公式計算）
@@ -188,8 +184,7 @@ function doPost(e) {
     // === 新增交易紀錄 ===
     else {
       var sheet = ss.getSheetByName('股票交易紀錄');
-      if (!sheet)
-        return ContentService.createTextOutput("Error: Sheet '股票交易紀錄' not found.");
+      if (!sheet) return ContentService.createTextOutput("Error: Sheet '股票交易紀錄' not found.");
 
       // 處理代碼格式
       var symbolStr = String(data.symbol);
@@ -198,24 +193,15 @@ function doPost(e) {
       }
 
       // 找出下一列：計算 A 欄 (日期) 有值的列數 + 1
-      var lastRow = sheet
-        .getRange('A1:A')
-        .getValues()
-        .filter(String).length;
+      var lastRow = sheet.getRange('A1:A').getValues().filter(String).length;
       var nextRow = lastRow + 1;
 
       // 使用 setValues 精確寫入 A~G 欄
-      sheet.getRange(nextRow, 1, 1, 7).setValues([
-        [
-          data.date,
-          data.broker,
-          symbolStr,
-          data.action,
-          data.qty,
-          data.price,
-          data.currency,
-        ],
-      ]);
+      sheet
+        .getRange(nextRow, 1, 1, 7)
+        .setValues([
+          [data.date, data.broker, symbolStr, data.action, data.qty, data.price, data.currency],
+        ]);
 
       return ContentService.createTextOutput('Success: Transaction Added');
     }

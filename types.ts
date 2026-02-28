@@ -60,6 +60,7 @@ export interface PionexAsset {
   qty: number;
   avgCost: number;
   currentPrice: number;
+  account: string;
 }
 
 export interface ExchangeRates {
