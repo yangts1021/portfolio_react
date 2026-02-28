@@ -23,6 +23,7 @@ const Navbar: React.FC<NavbarProps> = ({
     { id: 'overview', icon: 'fa-gauge-high', label: '資產總覽' },
     { id: 'bank', icon: 'fa-building-columns', label: '銀行餘額' },
     { id: 'pledge', icon: 'fa-hand-holding-dollar', label: '股票質押' },
+    { id: 'pionex', icon: 'fa-bitcoin-sign', label: 'Pionex' },
   ];
 
   return (

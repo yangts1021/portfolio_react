@@ -18,4 +18,5 @@ export const STORAGE_KEYS = {
   GAS_URL: 'my_gas_url',
   RATES: 'my_exchange_rates',
   RATE_MODE: 'my_rate_mode',
+  PIONEX: 'my_pionex_data',
 };

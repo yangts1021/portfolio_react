@@ -1,11 +1,20 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { TabType, Transaction, BankAccount, PledgeRecord, RateMode, ExchangeRates } from './types';
+import {
+  TabType,
+  Transaction,
+  BankAccount,
+  PledgeRecord,
+  PionexAsset,
+  RateMode,
+  ExchangeRates,
+} from './types';
 import { STORAGE_KEYS } from './constants';
 import Navbar from './components/Layout/Navbar';
 import TransactionsTab from './components/Tabs/TransactionsTab';
 import OverviewTab from './components/Tabs/OverviewTab';
 import BankTab from './components/Tabs/BankTab';
 import PledgeTab from './components/Tabs/PledgeTab';
+import PionexTab from './components/Tabs/PionexTab';
 import { AlertModal, ConfirmModal, DataSyncModal } from './components/UI/Modals';
 
 const App: React.FC = () => {
@@ -63,6 +72,11 @@ const App: React.FC = () => {
     return saved ? JSON.parse(saved) : { USD: 32.5, HKD: 4.1, JPY: 0.22, TWD: 1 };
   });
 
+  const [pionexData, setPionexData] = useState<PionexAsset[]>(() => {
+    const saved = localStorage.getItem(STORAGE_KEYS.PIONEX);
+    return saved ? JSON.parse(saved) : [];
+  });
+
   const [rateMode, setRateMode] = useState<RateMode>(() => {
     return (localStorage.getItem(STORAGE_KEYS.RATE_MODE) as RateMode) || 'auto';
   });
@@ -102,6 +116,9 @@ const App: React.FC = () => {
   useEffect(() => {
     localStorage.setItem(STORAGE_KEYS.RATES, JSON.stringify(exchangeRates));
   }, [exchangeRates]);
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEYS.PIONEX, JSON.stringify(pionexData));
+  }, [pionexData]);
   useEffect(() => {
     localStorage.setItem(STORAGE_KEYS.RATE_MODE, rateMode);
   }, [rateMode]);
@@ -184,6 +201,16 @@ const App: React.FC = () => {
           setPledgeData(formattedPledge);
         }
 
+        if (json.pionexData) {
+          const formattedPionex: PionexAsset[] = json.pionexData.map((row: any) => ({
+            coin: String(row.coin).toUpperCase(),
+            qty: parseFloat(row.qty) || 0,
+            avgCost: parseFloat(row.avgCost) || 0,
+            currentPrice: parseFloat(row.currentPrice) || 0,
+          }));
+          setPionexData(formattedPionex);
+        }
+
         if (!isSilent) {
           showToast('資料同步成功！');
           setIsDataModalOpen(false);
@@ -224,6 +251,7 @@ const App: React.FC = () => {
         setSymbolBetas({});
         setBankData([]);
         setPledgeData([]);
+        setPionexData([]);
         setExchangeRates({ USD: 32.5, HKD: 4.1, JPY: 0.22, TWD: 1 });
         showToast('所有資料已清除');
       },
@@ -285,6 +313,9 @@ const App: React.FC = () => {
               gasUrl={gasUrl}
               showToast={showToast}
             />
+          )}
+          {activeTab === 'pionex' && (
+            <PionexTab pionexData={pionexData} exchangeRates={exchangeRates} />
           )}
         </div>
       </main>

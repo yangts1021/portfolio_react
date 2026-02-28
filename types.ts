@@ -1,6 +1,6 @@
 export type ActionType = 'BUY' | 'SELL';
 export type CurrencyType = 'TWD' | 'USD' | 'HKD' | 'JPY';
-export type TabType = 'transactions' | 'overview' | 'bank' | 'pledge';
+export type TabType = 'transactions' | 'overview' | 'bank' | 'pledge' | 'pionex';
 export type RateMode = 'manual' | 'auto';
 
 export interface Transaction {
@@ -53,6 +53,13 @@ export interface PortfolioItem {
   roi: number;
   marketValueTWD: number;
   allocation: number;
+}
+
+export interface PionexAsset {
+  coin: string;
+  qty: number;
+  avgCost: number;
+  currentPrice: number;
 }
 
 export interface ExchangeRates {
