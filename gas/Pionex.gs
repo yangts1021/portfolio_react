@@ -76,7 +76,42 @@ function fetchPionexTickers() {
 }
 
 /**
- * 整合兩個帳戶的 balances + tickers，寫入「Pionex」工作表
+ * 呼叫 GET /uapi/v1/account/positions，回傳 netSize != 0 的合約持倉
+ * @param {string} apiKey - Pionex API Key
+ * @param {string} secret - Pionex API Secret
+ */
+function fetchPionexPositions(apiKey, secret) {
+  if (!apiKey || !secret) {
+    throw new Error('PIONEX_API_KEY 或 PIONEX_API_SECRET 未設定');
+  }
+
+  var timestamp = Date.now().toString();
+  var path = '/uapi/v1/account/positions';
+  var signature = getPionexSignature('GET', path, timestamp, secret);
+
+  var url = 'https://api.pionex.com' + path + '?timestamp=' + timestamp;
+  var response = UrlFetchApp.fetch(url, {
+    headers: {
+      'PIONEX-KEY': apiKey,
+      'PIONEX-SIGNATURE': signature,
+    },
+    muteHttpExceptions: true,
+  });
+
+  var json = JSON.parse(response.getContentText());
+  if (!json.result || !json.data || !json.data.positions) {
+    // 若帳戶無合約持倉，API 可能回傳空，不視為錯誤
+    Logger.log('Pionex positions API 回應: ' + response.getContentText());
+    return [];
+  }
+
+  return json.data.positions.filter(function (p) {
+    return parseFloat(p.netSize) !== 0;
+  });
+}
+
+/**
+ * 整合兩個帳戶的 balances + positions + tickers，寫入「Pionex」工作表
  */
 function syncPionexData() {
   var props = PropertiesService.getScriptProperties();
@@ -103,18 +138,39 @@ function syncPionexData() {
       return;
     }
 
+    // 現貨餘額
     var balances = fetchPionexBalances(acc.apiKey, acc.secret);
     balances.forEach(function (b) {
       var coin = b.coin;
       var qty = parseFloat(b.free) + parseFloat(b.frozen);
       allResults.push({
         account: acc.name,
+        type: 'spot',
         coin: coin,
         qty: qty,
         avgCost: 0,
         currentPrice: prices[coin] || 0,
       });
     });
+
+    // 合約持倉
+    try {
+      var positions = fetchPionexPositions(acc.apiKey, acc.secret);
+      positions.forEach(function (p) {
+        var symbol = p.symbol || '';
+        var coin = symbol.replace('_USDT_PERP', '').replace('_USDT', '');
+        allResults.push({
+          account: acc.name,
+          type: 'futures',
+          coin: coin,
+          qty: parseFloat(p.netSize) || 0,
+          avgCost: parseFloat(p.avgPrice) || 0,
+          currentPrice: parseFloat(p.markPrice) || 0,
+        });
+      });
+    } catch (e) {
+      Logger.log('帳戶 ' + acc.name + ' 合約持倉取得失敗: ' + e.message);
+    }
   });
 
   // 寫入 Pionex 工作表
@@ -122,20 +178,24 @@ function syncPionexData() {
   var sheet = ss.getSheetByName('Pionex');
   if (!sheet) {
     sheet = ss.insertSheet('Pionex');
-    sheet.getRange(1, 1, 1, 5).setValues([['account', 'coin', 'qty', 'avgCost', 'currentPrice']]);
   }
+
+  // 重設標題列為 6 欄
+  sheet
+    .getRange(1, 1, 1, 6)
+    .setValues([['account', 'type', 'coin', 'qty', 'avgCost', 'currentPrice']]);
 
   // 清除舊資料（保留標題列）
   if (sheet.getLastRow() > 1) {
-    sheet.getRange(2, 1, sheet.getLastRow() - 1, 5).clearContent();
+    sheet.getRange(2, 1, sheet.getLastRow() - 1, 6).clearContent();
   }
 
   // 寫入新資料
   if (allResults.length > 0) {
     var rows = allResults.map(function (item) {
-      return [item.account, item.coin, item.qty, item.avgCost, item.currentPrice];
+      return [item.account, item.type, item.coin, item.qty, item.avgCost, item.currentPrice];
     });
-    sheet.getRange(2, 1, rows.length, 5).setValues(rows);
+    sheet.getRange(2, 1, rows.length, 6).setValues(rows);
   }
 
   return allResults;
@@ -151,17 +211,18 @@ function readPionexFromSheet() {
     return [];
   }
 
-  var data = sheet.getRange(2, 1, sheet.getLastRow() - 1, 5).getValues();
+  var data = sheet.getRange(2, 1, sheet.getLastRow() - 1, 6).getValues();
   var list = [];
   for (var i = 0; i < data.length; i++) {
     var row = data[i];
-    if (row[1] === '') continue;
+    if (row[2] === '') continue;
     list.push({
       account: row[0],
-      coin: row[1],
-      qty: row[2],
-      avgCost: row[3],
-      currentPrice: row[4],
+      type: row[1] || 'spot',
+      coin: row[2],
+      qty: row[3],
+      avgCost: row[4],
+      currentPrice: row[5],
     });
   }
   return list;

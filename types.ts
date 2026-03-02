@@ -61,6 +61,7 @@ export interface PionexAsset {
   avgCost: number;
   currentPrice: number;
   account: string;
+  type: 'spot' | 'futures';
 }
 
 export interface ExchangeRates {

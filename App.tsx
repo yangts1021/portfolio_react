@@ -208,6 +208,7 @@ const App: React.FC = () => {
             avgCost: parseFloat(row.avgCost) || 0,
             currentPrice: parseFloat(row.currentPrice) || 0,
             account: row.account || '',
+            type: row.type || 'spot',
           }));
           setPionexData(formattedPionex);
         }
