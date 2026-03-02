@@ -74,7 +74,8 @@ const App: React.FC = () => {
 
   const [pionexData, setPionexData] = useState<PionexAsset[]>(() => {
     const saved = localStorage.getItem(STORAGE_KEYS.PIONEX);
-    return saved ? JSON.parse(saved) : [];
+    if (!saved) return [];
+    return JSON.parse(saved).map((item: any) => ({ ...item, type: item.type || 'spot' }));
   });
 
   const [rateMode, setRateMode] = useState<RateMode>(() => {

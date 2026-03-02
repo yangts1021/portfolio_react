@@ -85,7 +85,7 @@ const PionexTab: React.FC<PionexTabProps> = ({ pionexData, exchangeRates }) => {
       {/* 各帳戶持倉 */}
       {accountNames.map((accountName) => {
         const items = accountGroups[accountName];
-        const spotItems = items.filter((i) => i.type === 'spot');
+        const spotItems = items.filter((i) => i.type !== 'futures');
         const futuresItems = items.filter((i) => i.type === 'futures');
         const acctMarketValue = items.reduce((s, a) => s + a.marketValue, 0);
         const acctPnl = items.reduce((s, a) => s + a.pnl, 0);
