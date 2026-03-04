@@ -9,6 +9,7 @@ interface BankTabProps {
   gasUrl: string;
   showToast: (msg: string) => void;
   onRefresh: () => void;
+  hideAmounts: boolean;
 }
 
 const BankTab: React.FC<BankTabProps> = ({
@@ -18,7 +19,9 @@ const BankTab: React.FC<BankTabProps> = ({
   gasUrl,
   showToast,
   onRefresh,
+  hideAmounts,
 }) => {
+  const fm: typeof formatMoney = hideAmounts ? () => '••••' : formatMoney;
   // 分別計算所有銀行的 USD 與 TWD 原始總額
   const totalUSD = bankData.reduce((sum, b) => sum + (b.usd || 0), 0);
   const totalTWD = bankData.reduce((sum, b) => sum + (b.twd || 0), 0);
@@ -56,7 +59,7 @@ const BankTab: React.FC<BankTabProps> = ({
             銀行總餘額 (USD)
           </div>
           <div className='text-3xl font-bold text-gray-800 dark:text-white'>
-            {formatMoney(totalUSD, { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
+            {fm(totalUSD, { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
           </div>
         </div>
         {/* 上方總額摘要卡片 - TWD 總額 */}
@@ -65,7 +68,7 @@ const BankTab: React.FC<BankTabProps> = ({
             銀行總餘額 (TWD)
           </div>
           <div className='text-3xl font-bold text-gray-800 dark:text-white'>
-            {formatMoney(totalTWD, { maximumFractionDigits: 0 })}
+            {fm(totalTWD, { maximumFractionDigits: 0 })}
           </div>
         </div>
       </div>
@@ -102,7 +105,7 @@ const BankTab: React.FC<BankTabProps> = ({
                   <td className='px-6 py-4'>
                     <input
                       type='text'
-                      defaultValue={formatMoney(b.usd)}
+                      defaultValue={fm(b.usd)}
                       onFocus={(e) => {
                         e.target.value = e.target.value.replace(/,/g, '');
                       }}
@@ -118,7 +121,7 @@ const BankTab: React.FC<BankTabProps> = ({
                   <td className='px-6 py-4'>
                     <input
                       type='text'
-                      defaultValue={formatMoney(b.twd)}
+                      defaultValue={fm(b.twd)}
                       onFocus={(e) => {
                         e.target.value = e.target.value.replace(/,/g, '');
                       }}
@@ -134,7 +137,7 @@ const BankTab: React.FC<BankTabProps> = ({
                   <td className='px-6 py-4'>
                     <input
                       type='text'
-                      defaultValue={formatMoney(b.loan)}
+                      defaultValue={fm(b.loan)}
                       onFocus={(e) => {
                         e.target.value = e.target.value.replace(/,/g, '');
                       }}

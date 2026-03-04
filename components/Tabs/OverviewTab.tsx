@@ -24,10 +24,12 @@ interface OverviewTabProps {
   onRefresh: () => void;
   onRefreshRate: () => void;
   isDarkMode: boolean;
+  hideAmounts: boolean;
 }
 
 const OverviewTab: React.FC<OverviewTabProps> = (props) => {
   const [showSoldOut, setShowSoldOut] = useState(false);
+  const fm: typeof formatMoney = props.hideAmounts ? () => '••••' : formatMoney;
 
   const portfolioItems = useMemo(() => {
     return calculatePortfolio(
@@ -197,13 +199,13 @@ const OverviewTab: React.FC<OverviewTabProps> = (props) => {
               <div className='flex justify-between p-2 bg-gray-50 dark:bg-gray-800 rounded dark:text-gray-300'>
                 <span>TWD 總額</span>
                 <span className='font-mono font-bold'>
-                  {formatMoney(bankSummary.twd, { maximumFractionDigits: 0 })}
+                  {fm(bankSummary.twd, { maximumFractionDigits: 0 })}
                 </span>
               </div>
               <div className='flex justify-between p-2 bg-gray-50 dark:bg-gray-800 rounded dark:text-gray-300'>
                 <span>USD 總額</span>
                 <span className='font-mono font-bold'>
-                  {formatMoney(bankSummary.usd, {
+                  {fm(bankSummary.usd, {
                     minimumFractionDigits: 0,
                     maximumFractionDigits: 2,
                   })}
@@ -225,7 +227,7 @@ const OverviewTab: React.FC<OverviewTabProps> = (props) => {
                 <div key={b.bank} className='flex justify-between dark:text-gray-300 items-center'>
                   <span className='text-gray-500 dark:text-gray-400'>{b.bank} 貸款</span>
                   <span className='font-mono text-red-500 dark:text-red-400 font-bold'>
-                    {formatMoney(b.loan, { maximumFractionDigits: 0 })}
+                    {fm(b.loan, { maximumFractionDigits: 0 })}
                   </span>
                 </div>
               ))}
@@ -233,7 +235,7 @@ const OverviewTab: React.FC<OverviewTabProps> = (props) => {
               <div className='flex justify-between dark:text-gray-300 items-center'>
                 <span className='text-gray-500 dark:text-gray-400'>股票質押 借款</span>
                 <span className='font-mono text-red-500 dark:text-red-400 font-bold'>
-                  {formatMoney(pledgeSummary.totalLoan, { maximumFractionDigits: 0 })}
+                  {fm(pledgeSummary.totalLoan, { maximumFractionDigits: 0 })}
                 </span>
               </div>
             )}
@@ -245,7 +247,7 @@ const OverviewTab: React.FC<OverviewTabProps> = (props) => {
           <div className='flex justify-between border-t border-gray-100 dark:border-gray-800 pt-2 font-bold dark:text-white mt-2'>
             <span>總負債合計</span>
             <span className='font-mono text-red-600 dark:text-red-400'>
-              {formatMoney(metrics.totalLiabilities, { maximumFractionDigits: 0 })}
+              {fm(metrics.totalLiabilities, { maximumFractionDigits: 0 })}
             </span>
           </div>
         </div>
@@ -257,7 +259,7 @@ const OverviewTab: React.FC<OverviewTabProps> = (props) => {
             證券市值
           </div>
           <div className='text-2xl font-bold dark:text-white'>
-            {formatMoney(metrics.stockMarketValueTWD, { maximumFractionDigits: 0 })}
+            {fm(metrics.stockMarketValueTWD, { maximumFractionDigits: 0 })}
           </div>
         </div>
         <div className='bg-white dark:bg-gray-900 p-5 rounded-xl shadow-sm border border-gray-100 dark:border-gray-800 text-center transition-colors'>
@@ -265,7 +267,7 @@ const OverviewTab: React.FC<OverviewTabProps> = (props) => {
             總投入成本
           </div>
           <div className='text-2xl font-bold dark:text-white'>
-            {formatMoney(metrics.stockCostTWD, { maximumFractionDigits: 0 })}
+            {fm(metrics.stockCostTWD, { maximumFractionDigits: 0 })}
           </div>
         </div>
         <div className='bg-white dark:bg-gray-900 p-5 rounded-xl shadow-sm border border-gray-100 dark:border-gray-800 text-center transition-colors'>
@@ -273,7 +275,7 @@ const OverviewTab: React.FC<OverviewTabProps> = (props) => {
             現金類價值
           </div>
           <div className='text-2xl font-bold dark:text-white'>
-            {formatMoney(bankSummary.totalCashTWD, { maximumFractionDigits: 0 })}
+            {fm(bankSummary.totalCashTWD, { maximumFractionDigits: 0 })}
           </div>
         </div>
       </div>
@@ -284,7 +286,7 @@ const OverviewTab: React.FC<OverviewTabProps> = (props) => {
             未實現損益
           </div>
           <div className={`text-2xl font-bold ${getColorClass(metrics.unrealizedPnLTWD)}`}>
-            {formatMoney(metrics.unrealizedPnLTWD, { maximumFractionDigits: 0 })}
+            {fm(metrics.unrealizedPnLTWD, { maximumFractionDigits: 0 })}
           </div>
         </div>
         <div className='bg-white dark:bg-gray-900 p-5 rounded-xl shadow-sm border border-gray-100 dark:border-gray-800 text-center transition-colors'>
@@ -292,7 +294,7 @@ const OverviewTab: React.FC<OverviewTabProps> = (props) => {
             已實現總損益
           </div>
           <div className={`text-2xl font-bold ${getColorClass(metrics.realizedPnLTWD)}`}>
-            {formatMoney(metrics.realizedPnLTWD, { maximumFractionDigits: 0 })}
+            {fm(metrics.realizedPnLTWD, { maximumFractionDigits: 0 })}
           </div>
         </div>
         <div className='bg-white dark:bg-gray-900 p-5 rounded-xl shadow-sm border border-gray-100 dark:border-gray-800 text-center border-l-4 border-blue-400 transition-colors'>
@@ -302,7 +304,7 @@ const OverviewTab: React.FC<OverviewTabProps> = (props) => {
           <div
             className={`text-2xl font-bold ${getColorClass(metrics.unrealizedPnLTWD + metrics.realizedPnLTWD)}`}
           >
-            {formatMoney(metrics.unrealizedPnLTWD + metrics.realizedPnLTWD, {
+            {fm(metrics.unrealizedPnLTWD + metrics.realizedPnLTWD, {
               maximumFractionDigits: 0,
             })}
           </div>
@@ -314,11 +316,11 @@ const OverviewTab: React.FC<OverviewTabProps> = (props) => {
           淨資產總額
         </div>
         <div className='text-4xl md:text-5xl font-bold'>
-          {formatMoney(metrics.netWorth, { maximumFractionDigits: 0 })}
+          {fm(metrics.netWorth, { maximumFractionDigits: 0 })}
         </div>
         <div className='text-blue-200 text-xs mt-2 font-mono'>
-          {formatMoney(metrics.totalAssets, { maximumFractionDigits: 0 })} (資產) -{' '}
-          {formatMoney(metrics.totalLiabilities, { maximumFractionDigits: 0 })} (負債)
+          {fm(metrics.totalAssets, { maximumFractionDigits: 0 })} (資產) -{' '}
+          {fm(metrics.totalLiabilities, { maximumFractionDigits: 0 })} (負債)
         </div>
       </div>
 
@@ -349,7 +351,7 @@ const OverviewTab: React.FC<OverviewTabProps> = (props) => {
                   ))}
                 </Pie>
                 <RechartsTooltip
-                  formatter={(v: any) => formatMoney(v as number, { maximumFractionDigits: 0 })}
+                  formatter={(v: any) => fm(v as number, { maximumFractionDigits: 0 })}
                   contentStyle={{
                     backgroundColor: props.isDarkMode ? '#111827' : '#fff',
                     borderRadius: '8px',
@@ -412,7 +414,7 @@ const OverviewTab: React.FC<OverviewTabProps> = (props) => {
                         %
                       </div>
                       <div className='text-[10px] text-gray-400 dark:text-gray-500 mt-1 font-bold'>
-                        {formatMoney(val, { maximumFractionDigits: 0 })} TWD
+                        {fm(val, { maximumFractionDigits: 0 })} TWD
                       </div>
                     </div>
                   ))}
@@ -479,15 +481,15 @@ const OverviewTab: React.FC<OverviewTabProps> = (props) => {
                     })}
                   </td>
                   <td className='px-4 py-4 text-right font-mono font-bold text-gray-800 dark:text-gray-100'>
-                    {formatMoney(p.marketValueTWD, { maximumFractionDigits: 0 })}
+                    {fm(p.marketValueTWD, { maximumFractionDigits: 0 })}
                   </td>
                   <td className='px-4 py-4 text-right text-gray-400 dark:text-gray-500 font-mono'>
-                    {formatMoney(p.avgCost)}
+                    {fm(p.avgCost)}
                   </td>
                   <td
                     className={`px-4 py-4 text-right font-bold ${getColorClass(p.unrealizedPnLTWD)}`}
                   >
-                    {formatMoney(p.unrealizedPnLTWD, { maximumFractionDigits: 0 })}
+                    {fm(p.unrealizedPnLTWD, { maximumFractionDigits: 0 })}
                   </td>
                   <td className={`px-4 py-4 text-right font-bold ${getColorClass(p.roi)}`}>
                     {p.roi.toFixed(2)}%
@@ -526,7 +528,7 @@ const OverviewTab: React.FC<OverviewTabProps> = (props) => {
                       <td
                         className={`px-4 py-4 text-right font-bold ${getColorClass(p.realizedPnL)}`}
                       >
-                        {formatMoney(p.realizedPnL * (props.exchangeRates[p.currency] || 1), {
+                        {fm(p.realizedPnL * (props.exchangeRates[p.currency] || 1), {
                           maximumFractionDigits: 0,
                         })}
                       </td>

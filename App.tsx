@@ -26,6 +26,11 @@ const App: React.FC = () => {
     return localStorage.getItem('theme') === 'dark';
   });
 
+  // Hide amounts (privacy mode)
+  const [hideAmounts, setHideAmounts] = useState<boolean>(() => {
+    return localStorage.getItem('hideAmounts') === 'true';
+  });
+
   // Apply theme to document
   useEffect(() => {
     if (isDarkMode) {
@@ -36,6 +41,10 @@ const App: React.FC = () => {
       localStorage.setItem('theme', 'light');
     }
   }, [isDarkMode]);
+
+  useEffect(() => {
+    localStorage.setItem('hideAmounts', String(hideAmounts));
+  }, [hideAmounts]);
 
   // Data State
   const [transactions, setTransactions] = useState<Transaction[]>(() => {
@@ -268,6 +277,8 @@ const App: React.FC = () => {
         setActiveTab={setActiveTab}
         isDarkMode={isDarkMode}
         setIsDarkMode={setIsDarkMode}
+        hideAmounts={hideAmounts}
+        setHideAmounts={setHideAmounts}
         onSyncClick={() => setIsDataModalOpen(true)}
         onClearClick={clearAllData}
       />
@@ -296,6 +307,7 @@ const App: React.FC = () => {
               onRefresh={fetchDataFromGAS}
               onRefreshRate={fetchExchangeRate}
               isDarkMode={isDarkMode}
+              hideAmounts={hideAmounts}
             />
           )}
           {activeTab === 'bank' && (
@@ -306,6 +318,7 @@ const App: React.FC = () => {
               gasUrl={gasUrl}
               showToast={showToast}
               onRefresh={() => fetchDataFromGAS(false)}
+              hideAmounts={hideAmounts}
             />
           )}
           {activeTab === 'pledge' && (
@@ -315,10 +328,15 @@ const App: React.FC = () => {
               currentPrices={currentPrices}
               gasUrl={gasUrl}
               showToast={showToast}
+              hideAmounts={hideAmounts}
             />
           )}
           {activeTab === 'pionex' && (
-            <PionexTab pionexData={pionexData} exchangeRates={exchangeRates} />
+            <PionexTab
+              pionexData={pionexData}
+              exchangeRates={exchangeRates}
+              hideAmounts={hideAmounts}
+            />
           )}
         </div>
       </main>

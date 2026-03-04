@@ -6,6 +6,8 @@ interface NavbarProps {
   setActiveTab: (tab: TabType) => void;
   isDarkMode: boolean;
   setIsDarkMode: (val: boolean) => void;
+  hideAmounts: boolean;
+  setHideAmounts: (val: boolean) => void;
   onSyncClick: () => void;
   onClearClick: () => void;
 }
@@ -15,6 +17,8 @@ const Navbar: React.FC<NavbarProps> = ({
   setActiveTab,
   isDarkMode,
   setIsDarkMode,
+  hideAmounts,
+  setHideAmounts,
   onSyncClick,
   onClearClick,
 }) => {
@@ -53,6 +57,13 @@ const Navbar: React.FC<NavbarProps> = ({
             ))}
           </div>
           <div className='flex items-center space-x-1 md:space-x-4'>
+            <button
+              onClick={() => setHideAmounts(!hideAmounts)}
+              className='p-2 rounded-lg text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors'
+              title={hideAmounts ? '顯示金額' : '隱藏金額'}
+            >
+              <i className={`fa-solid ${hideAmounts ? 'fa-eye-slash' : 'fa-eye'}`}></i>
+            </button>
             <button
               onClick={() => setIsDarkMode(!isDarkMode)}
               className='p-2 rounded-lg text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors'

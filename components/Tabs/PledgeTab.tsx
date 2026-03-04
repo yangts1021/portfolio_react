@@ -8,6 +8,7 @@ interface PledgeTabProps {
   currentPrices: Record<string, number>;
   gasUrl: string;
   showToast: (msg: string) => void;
+  hideAmounts: boolean;
 }
 
 const PledgeTab: React.FC<PledgeTabProps> = ({
@@ -16,7 +17,9 @@ const PledgeTab: React.FC<PledgeTabProps> = ({
   currentPrices,
   gasUrl,
   showToast,
+  hideAmounts,
 }) => {
+  const fm: typeof formatMoney = hideAmounts ? () => '••••' : formatMoney;
   const [form, setForm] = useState({
     transferDate: new Date().toISOString().split('T')[0],
     symbol: '',
@@ -86,9 +89,7 @@ const PledgeTab: React.FC<PledgeTabProps> = ({
       <div className='grid grid-cols-1 md:grid-cols-2 gap-4'>
         <div className='bg-white dark:bg-gray-900 p-5 rounded-xl shadow-sm border border-gray-100 dark:border-gray-800 text-center transition-colors'>
           <div className='text-gray-400 dark:text-gray-500 text-xs uppercase mb-1'>總質押借款</div>
-          <div className='text-3xl font-bold text-red-600 dark:text-red-400'>
-            {formatMoney(totalLoan)}
-          </div>
+          <div className='text-3xl font-bold text-red-600 dark:text-red-400'>{fm(totalLoan)}</div>
         </div>
         <div className='bg-white dark:bg-gray-900 p-5 rounded-xl shadow-sm border border-gray-100 dark:border-gray-800 text-center transition-colors'>
           <div className='text-gray-400 dark:text-gray-500 text-xs uppercase mb-1'>整戶維持率</div>
@@ -232,7 +233,7 @@ const PledgeTab: React.FC<PledgeTabProps> = ({
                         </span>
                       </td>
                       <td className='px-4 py-4 text-right text-red-600 dark:text-red-400 font-bold'>
-                        {formatMoney(p.loanAmount)}
+                        {fm(p.loanAmount)}
                       </td>
                       <td
                         className={`px-4 py-4 text-right font-bold ${ratio < 140 ? 'text-red-600' : 'text-green-600'} dark:opacity-90`}

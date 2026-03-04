@@ -5,6 +5,7 @@ import { formatMoney, getColorClass } from '../../utils/calculations';
 interface PionexTabProps {
   pionexData: PionexAsset[];
   exchangeRates: ExchangeRates;
+  hideAmounts: boolean;
 }
 
 interface EnrichedAsset extends PionexAsset {
@@ -14,7 +15,8 @@ interface EnrichedAsset extends PionexAsset {
   pnlPct: number;
 }
 
-const PionexTab: React.FC<PionexTabProps> = ({ pionexData, exchangeRates }) => {
+const PionexTab: React.FC<PionexTabProps> = ({ pionexData, exchangeRates, hideAmounts }) => {
+  const fm: typeof formatMoney = hideAmounts ? () => '••••' : formatMoney;
   const usdToTwd = exchangeRates.USD || 32.5;
 
   const enriched: EnrichedAsset[] = useMemo(
@@ -66,19 +68,17 @@ const PionexTab: React.FC<PionexTabProps> = ({ pionexData, exchangeRates }) => {
       <div className='grid grid-cols-1 md:grid-cols-3 gap-4'>
         <div className='bg-white dark:bg-gray-900 rounded-xl shadow p-5'>
           <p className='text-xs text-gray-500 dark:text-gray-400 mb-1'>總市值 (USD)</p>
-          <p className='text-2xl font-bold dark:text-white'>$ {formatMoney(totalMarketValueUSD)}</p>
+          <p className='text-2xl font-bold dark:text-white'>$ {fm(totalMarketValueUSD)}</p>
         </div>
         <div className='bg-white dark:bg-gray-900 rounded-xl shadow p-5'>
           <p className='text-xs text-gray-500 dark:text-gray-400 mb-1'>總市值 (TWD)</p>
           <p className='text-2xl font-bold dark:text-white'>
-            $ {formatMoney(totalMarketValueUSD * usdToTwd)}
+            $ {fm(totalMarketValueUSD * usdToTwd)}
           </p>
         </div>
         <div className='bg-white dark:bg-gray-900 rounded-xl shadow p-5'>
           <p className='text-xs text-gray-500 dark:text-gray-400 mb-1'>總損益 (USD)</p>
-          <p className={`text-2xl font-bold ${getColorClass(totalPnlUSD)}`}>
-            $ {formatMoney(totalPnlUSD)}
-          </p>
+          <p className={`text-2xl font-bold ${getColorClass(totalPnlUSD)}`}>$ {fm(totalPnlUSD)}</p>
         </div>
       </div>
 
@@ -101,14 +101,9 @@ const PionexTab: React.FC<PionexTabProps> = ({ pionexData, exchangeRates }) => {
                 {accountName} 持倉明細
               </h2>
               <div className='text-sm text-gray-500 dark:text-gray-400'>
-                市值{' '}
-                <span className='font-semibold dark:text-white'>
-                  $ {formatMoney(acctMarketValue)}
-                </span>
+                市值 <span className='font-semibold dark:text-white'>$ {fm(acctMarketValue)}</span>
                 {' / 損益 '}
-                <span className={`font-semibold ${getColorClass(acctPnl)}`}>
-                  $ {formatMoney(acctPnl)}
-                </span>
+                <span className={`font-semibold ${getColorClass(acctPnl)}`}>$ {fm(acctPnl)}</span>
               </div>
             </div>
 
@@ -119,6 +114,7 @@ const PionexTab: React.FC<PionexTabProps> = ({ pionexData, exchangeRates }) => {
                 items={spotItems}
                 accountName={accountName}
                 isFutures={false}
+                hideAmounts={hideAmounts}
               />
             )}
 
@@ -129,6 +125,7 @@ const PionexTab: React.FC<PionexTabProps> = ({ pionexData, exchangeRates }) => {
                 items={futuresItems}
                 accountName={accountName}
                 isFutures={true}
+                hideAmounts={hideAmounts}
               />
             )}
           </div>
@@ -144,7 +141,9 @@ const AssetTable: React.FC<{
   items: EnrichedAsset[];
   accountName: string;
   isFutures: boolean;
-}> = ({ label, items, accountName, isFutures }) => {
+  hideAmounts: boolean;
+}> = ({ label, items, accountName, isFutures, hideAmounts }) => {
+  const fm: typeof formatMoney = hideAmounts ? () => '••••' : formatMoney;
   const subtotalMarketValue = items.reduce((s, a) => s + a.marketValue, 0);
   const subtotalPnl = items.reduce((s, a) => s + a.pnl, 0);
 
@@ -188,23 +187,21 @@ const AssetTable: React.FC<{
                       {item.qty >= 0 ? '多' : '空'}
                     </span>
                   )}
-                  {formatMoney(Math.abs(item.qty), { maximumFractionDigits: 8 })}
+                  {fm(Math.abs(item.qty), { maximumFractionDigits: 8 })}
                 </td>
                 <td className='px-4 py-3 text-right dark:text-gray-300'>
-                  {formatMoney(item.avgCost, { maximumFractionDigits: 6 })}
+                  {fm(item.avgCost, { maximumFractionDigits: 6 })}
                 </td>
                 <td className='px-4 py-3 text-right dark:text-gray-300'>
-                  {formatMoney(item.currentPrice, { maximumFractionDigits: 6 })}
+                  {fm(item.currentPrice, { maximumFractionDigits: 6 })}
                 </td>
-                <td className='px-4 py-3 text-right dark:text-gray-300'>
-                  {formatMoney(item.marketValue)}
-                </td>
+                <td className='px-4 py-3 text-right dark:text-gray-300'>{fm(item.marketValue)}</td>
                 <td className={`px-4 py-3 text-right font-medium ${getColorClass(item.pnl)}`}>
-                  {formatMoney(item.pnl)}
+                  {fm(item.pnl)}
                 </td>
                 <td className={`px-4 py-3 text-right font-medium ${getColorClass(item.pnlPct)}`}>
                   {item.pnlPct >= 0 ? '+' : ''}
-                  {formatMoney(item.pnlPct)}%
+                  {fm(item.pnlPct)}%
                 </td>
               </tr>
             ))}
@@ -215,11 +212,9 @@ const AssetTable: React.FC<{
               <td className='px-4 py-3' />
               <td className='px-4 py-3' />
               <td className='px-4 py-3' />
-              <td className='px-4 py-3 text-right dark:text-white'>
-                {formatMoney(subtotalMarketValue)}
-              </td>
+              <td className='px-4 py-3 text-right dark:text-white'>{fm(subtotalMarketValue)}</td>
               <td className={`px-4 py-3 text-right font-medium ${getColorClass(subtotalPnl)}`}>
-                {formatMoney(subtotalPnl)}
+                {fm(subtotalPnl)}
               </td>
               <td className='px-4 py-3' />
             </tr>
