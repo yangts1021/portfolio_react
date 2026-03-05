@@ -34,6 +34,19 @@ export interface PledgeRecord {
   interest?: number;
 }
 
+export interface BrokerDetail {
+  broker: string;
+  inventory: number;
+  totalCost: number;
+  avgCost: number;
+  currentPrice: number;
+  marketValue: number;
+  unrealizedPnL: number;
+  unrealizedPnLTWD: number;
+  roi: number;
+  marketValueTWD: number;
+}
+
 export interface PortfolioItem {
   symbol: string;
   currency: CurrencyType;
@@ -53,6 +66,7 @@ export interface PortfolioItem {
   roi: number;
   marketValueTWD: number;
   allocation: number;
+  brokerDetails: BrokerDetail[];
 }
 
 export interface PionexAsset {

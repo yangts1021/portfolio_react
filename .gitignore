@@ -24,6 +24,11 @@ fubon/*.json
 *.whl
 fubon/log/
 
+# Sinopac 設定與憑證
+sinopac/config.json
+sinopac/venv/
+sinopac/*.log
+
 # Misc
 .DS_Store
 .env

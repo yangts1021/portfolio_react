@@ -1,0 +1,10 @@
+{
+  "sinopac": {
+    "api_key": "你的 API Key",
+    "secret_key": "你的 Secret Key"
+  },
+  "google_sheet": {
+    "spreadsheet_id": "你的 Google Sheet ID",
+    "credentials_path": "/path/to/service_account.json"
+  }
+}

@@ -29,7 +29,17 @@ interface OverviewTabProps {
 
 const OverviewTab: React.FC<OverviewTabProps> = (props) => {
   const [showSoldOut, setShowSoldOut] = useState(false);
+  const [expandedSymbols, setExpandedSymbols] = useState<Set<string>>(new Set());
   const fm: typeof formatMoney = props.hideAmounts ? () => '••••' : formatMoney;
+
+  const toggleExpand = (symbol: string) => {
+    setExpandedSymbols((prev) => {
+      const next = new Set(prev);
+      if (next.has(symbol)) next.delete(symbol);
+      else next.add(symbol);
+      return next;
+    });
+  };
 
   const portfolioItems = useMemo(() => {
     return calculatePortfolio(
@@ -452,56 +462,116 @@ const OverviewTab: React.FC<OverviewTabProps> = (props) => {
               </tr>
             </thead>
             <tbody className='divide-y divide-gray-100 dark:divide-gray-800'>
-              {metrics.activeItems.map((p) => (
-                <tr
-                  key={p.symbol}
-                  className='hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors'
-                >
-                  <td className='px-4 py-4'>
-                    <span
-                      className='px-2 py-0.5 rounded text-white font-bold text-[10px]'
-                      style={{ backgroundColor: CATEGORY_COLORS[p.category] }}
+              {metrics.activeItems.map((p) => {
+                const hasMultiBroker = p.brokerDetails.length > 1;
+                const isExpanded = expandedSymbols.has(p.symbol);
+                return (
+                  <React.Fragment key={p.symbol}>
+                    <tr
+                      className={`hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors ${hasMultiBroker ? 'cursor-pointer' : ''}`}
+                      onClick={hasMultiBroker ? () => toggleExpand(p.symbol) : undefined}
                     >
-                      {p.category}
-                    </span>
-                  </td>
-                  <td className='px-4 py-4 font-bold text-gray-800 dark:text-gray-200'>
-                    {p.symbol}{' '}
-                    <span className='text-[10px] text-gray-400 dark:text-gray-500 font-normal'>
-                      {p.currency}
-                    </span>
-                  </td>
-                  <td className='px-4 py-4 text-right font-mono'>
-                    {p.inventory.toLocaleString(undefined, { maximumFractionDigits: 4 })}
-                  </td>
-                  <td className='px-4 py-4 text-right bg-yellow-50 dark:bg-yellow-900/10 font-mono font-bold text-gray-700 dark:text-gray-300'>
-                    {p.currentPrice.toLocaleString(undefined, {
-                      minimumFractionDigits: 2,
-                      maximumFractionDigits: 2,
-                    })}
-                  </td>
-                  <td className='px-4 py-4 text-right font-mono font-bold text-gray-800 dark:text-gray-100'>
-                    {fm(p.marketValueTWD, { maximumFractionDigits: 0 })}
-                  </td>
-                  <td className='px-4 py-4 text-right text-gray-400 dark:text-gray-500 font-mono'>
-                    {fm(p.avgCost)}
-                  </td>
-                  <td
-                    className={`px-4 py-4 text-right font-bold ${getColorClass(p.unrealizedPnLTWD)}`}
-                  >
-                    {fm(p.unrealizedPnLTWD, { maximumFractionDigits: 0 })}
-                  </td>
-                  <td className={`px-4 py-4 text-right font-bold ${getColorClass(p.roi)}`}>
-                    {p.roi.toFixed(2)}%
-                  </td>
-                  <td className='px-4 py-4 text-right font-mono text-gray-400'>
-                    {metrics.totalAssets > 0
-                      ? ((p.marketValueTWD / metrics.totalAssets) * 100).toFixed(1)
-                      : '0.0'}
-                    %
-                  </td>
-                </tr>
-              ))}
+                      <td className='px-4 py-4'>
+                        <span
+                          className='px-2 py-0.5 rounded text-white font-bold text-[10px]'
+                          style={{ backgroundColor: CATEGORY_COLORS[p.category] }}
+                        >
+                          {p.category}
+                        </span>
+                      </td>
+                      <td className='px-4 py-4 font-bold text-gray-800 dark:text-gray-200'>
+                        {hasMultiBroker && (
+                          <i
+                            className={`fa-solid fa-chevron-${isExpanded ? 'up' : 'down'} mr-1.5 text-[10px] text-gray-400`}
+                          ></i>
+                        )}
+                        {p.symbol}{' '}
+                        <span className='text-[10px] text-gray-400 dark:text-gray-500 font-normal'>
+                          {p.currency}
+                        </span>
+                        {hasMultiBroker ? (
+                          <span className='ml-1.5 text-[9px] px-1.5 py-0.5 bg-blue-100 dark:bg-blue-900/30 text-blue-500 dark:text-blue-400 rounded font-normal'>
+                            {p.brokerDetails.length} 券商
+                          </span>
+                        ) : p.brokerDetails.length === 1 ? (
+                          <span className='ml-1.5 text-[10px] text-gray-400 dark:text-gray-500 font-normal'>
+                            {p.brokerDetails[0].broker}
+                          </span>
+                        ) : null}
+                      </td>
+                      <td className='px-4 py-4 text-right font-mono'>
+                        {p.inventory.toLocaleString(undefined, { maximumFractionDigits: 4 })}
+                      </td>
+                      <td className='px-4 py-4 text-right bg-yellow-50 dark:bg-yellow-900/10 font-mono font-bold text-gray-700 dark:text-gray-300'>
+                        {p.currentPrice.toLocaleString(undefined, {
+                          minimumFractionDigits: 2,
+                          maximumFractionDigits: 2,
+                        })}
+                      </td>
+                      <td className='px-4 py-4 text-right font-mono font-bold text-gray-800 dark:text-gray-100'>
+                        {fm(p.marketValueTWD, { maximumFractionDigits: 0 })}
+                      </td>
+                      <td className='px-4 py-4 text-right text-gray-400 dark:text-gray-500 font-mono'>
+                        {fm(p.avgCost)}
+                      </td>
+                      <td
+                        className={`px-4 py-4 text-right font-bold ${getColorClass(p.unrealizedPnLTWD)}`}
+                      >
+                        {fm(p.unrealizedPnLTWD, { maximumFractionDigits: 0 })}
+                      </td>
+                      <td className={`px-4 py-4 text-right font-bold ${getColorClass(p.roi)}`}>
+                        {p.roi.toFixed(2)}%
+                      </td>
+                      <td className='px-4 py-4 text-right font-mono text-gray-400'>
+                        {metrics.totalAssets > 0
+                          ? ((p.marketValueTWD / metrics.totalAssets) * 100).toFixed(1)
+                          : '0.0'}
+                        %
+                      </td>
+                    </tr>
+                    {hasMultiBroker &&
+                      isExpanded &&
+                      p.brokerDetails.map((bd) => (
+                        <tr
+                          key={`${p.symbol}-${bd.broker}`}
+                          className='bg-blue-50/50 dark:bg-blue-900/10 text-[11px]'
+                        >
+                          <td className='px-4 py-2'></td>
+                          <td className='px-4 py-2 pl-10 text-gray-500 dark:text-gray-400'>
+                            <i className='fa-solid fa-building-columns mr-1.5 text-[9px]'></i>
+                            {bd.broker}
+                          </td>
+                          <td className='px-4 py-2 text-right font-mono text-gray-500 dark:text-gray-400'>
+                            {bd.inventory.toLocaleString(undefined, { maximumFractionDigits: 4 })}
+                          </td>
+                          <td className='px-4 py-2 text-right bg-yellow-50 dark:bg-yellow-900/10 font-mono text-gray-500 dark:text-gray-400'>
+                            {bd.currentPrice.toLocaleString(undefined, {
+                              minimumFractionDigits: 2,
+                              maximumFractionDigits: 2,
+                            })}
+                          </td>
+                          <td className='px-4 py-2 text-right font-mono text-gray-600 dark:text-gray-300'>
+                            {fm(bd.marketValueTWD, { maximumFractionDigits: 0 })}
+                          </td>
+                          <td className='px-4 py-2 text-right font-mono text-gray-400 dark:text-gray-500'>
+                            {fm(bd.avgCost)}
+                          </td>
+                          <td
+                            className={`px-4 py-2 text-right font-bold ${getColorClass(bd.unrealizedPnLTWD)}`}
+                          >
+                            {fm(bd.unrealizedPnLTWD, { maximumFractionDigits: 0 })}
+                          </td>
+                          <td
+                            className={`px-4 py-2 text-right font-bold ${getColorClass(bd.roi)}`}
+                          >
+                            {bd.roi.toFixed(2)}%
+                          </td>
+                          <td className='px-4 py-2'></td>
+                        </tr>
+                      ))}
+                  </React.Fragment>
+                );
+              })}
               <tr
                 className='bg-gray-100 dark:bg-gray-800 cursor-pointer hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors'
                 onClick={() => setShowSoldOut(!showSoldOut)}
