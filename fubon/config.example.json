@@ -1,0 +1,12 @@
+{
+  "fubon": {
+    "id": "A123456789",
+    "api_key": "申請的 Secret Key",
+    "cert_path": "/path/to/A123456789.pfx",
+    "cert_password": "憑證密碼（選填，使用預設密碼可留空）"
+  },
+  "google_sheet": {
+    "spreadsheet_id": "你的Google Sheet ID",
+    "credentials_path": "/path/to/service_account.json"
+  }
+}

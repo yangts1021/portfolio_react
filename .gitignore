@@ -12,6 +12,18 @@ dist
 dist-ssr
 build
 
+# Google Apps Script
+gas/.clasp.json
+
+# Fubon 設定與憑證
+fubon/config.json
+fubon/*.json
+!fubon/config.example.json
+*.pfx
+*.p12
+*.whl
+fubon/log/
+
 # Misc
 .DS_Store
 .env
