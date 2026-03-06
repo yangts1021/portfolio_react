@@ -1,4 +1,5 @@
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -21,7 +22,11 @@ def login_sinopac(config):
     """用 API Key 登入永豐 Shioaji，回傳 api 物件"""
     cfg = config['sinopac']
     api = sj.Shioaji()
-    accounts = api.login(cfg['api_key'], cfg['secret_key'])
+    accounts = api.login(
+        cfg['api_key'],
+        cfg['secret_key'],
+        contracts_timeout=10000,
+    )
     if not accounts:
         print('登入失敗：請確認 API Key 和 Secret Key')
         sys.exit(1)
@@ -29,47 +34,120 @@ def login_sinopac(config):
     return api
 
 
-def fetch_positions(api):
-    """查詢股票庫存，回傳寫入 Sheet 的資料列"""
-    positions = api.list_positions(api.stock_account)
-    rows = []
-    for pos in positions:
-        rows.append([
-            pos.code,
-            pos.quantity,
-            pos.price,
-            pos.last_price,
-            pos.pnl,
-        ])
-    return rows
-
-
-def write_to_sheet(config, rows):
-    """用 gspread 寫入 Google Sheet「永豐庫存」工作表"""
+def open_spreadsheet(config):
+    """建立 Google Sheet 連線，回傳 spreadsheet 物件"""
     creds = Credentials.from_service_account_file(
         config['google_sheet']['credentials_path'],
         scopes=['https://www.googleapis.com/auth/spreadsheets'],
     )
     gc = gspread.authorize(creds)
-    sh = gc.open_by_key(config['google_sheet']['spreadsheet_id'])
+    return gc.open_by_key(config['google_sheet']['spreadsheet_id'])
 
+
+def _enum_name(val):
+    """安全取得 enum 的 name，非 enum 則轉字串"""
+    return val.name if hasattr(val, 'name') else str(val)
+
+
+def fetch_positions(api):
+    """查詢股票庫存，回傳 (positions 原始物件, 寫入 Sheet 的資料列)"""
+    positions = api.list_positions(api.stock_account)
+    rows = []
+    for pos in positions:
+        rows.append([
+            pos.code,
+            _enum_name(pos.direction),
+            pos.quantity * 1000,
+            float(pos.price),
+            float(pos.last_price),
+            float(pos.pnl),
+            _enum_name(pos.cond),
+        ])
+    return positions, rows
+
+
+def write_positions_to_sheet(sh, rows):
+    """寫入庫存到 Google Sheet「永豐庫存」工作表"""
     try:
         ws = sh.worksheet('永豐庫存')
     except gspread.WorksheetNotFound:
         ws = sh.add_worksheet('永豐庫存', rows=100, cols=10)
 
     ws.clear()
-    header = ['代碼', '庫存股數', '成本均價', '現價', '未實現損益']
-    ws.update([header] + rows)
+    header = ['代碼', '方向', '庫存股數', '成本均價', '現價', '未實現損益', '交易類型']
+    ws.update([header] + rows, value_input_option='RAW')
+
+
+def fetch_position_details(api, positions):
+    """查詢所有庫存的交易明細"""
+    rows = []
+    for pos in positions:
+        details = api.list_position_detail(api.stock_account, detail_id=pos.id)
+        for d in details:
+            rows.append([
+                str(d.date),
+                d.code,
+                _enum_name(d.direction),
+                d.quantity * 1000,
+                float(d.price),
+                float(d.last_price),
+                float(d.pnl),
+                float(d.fee),
+                _enum_name(d.currency),
+                _enum_name(d.cond),
+                d.dseq,
+            ])
+    return rows
+
+
+def sync_trade_records(sh, api, positions):
+    """將交易明細同步到 Google Sheet「永豐交易紀錄」，只新增不重複的紀錄"""
+    header = ['日期', '代碼', '方向', '股數', '成本價', '現價', '損益', '手續費', '幣別', '交易類型', '委託序號']
+
+    try:
+        ws = sh.worksheet('永豐交易紀錄')
+    except gspread.WorksheetNotFound:
+        ws = sh.add_worksheet('永豐交易紀錄', rows=100, cols=len(header))
+        ws.update([header])
+
+    existing = ws.get_all_values()
+    existing_keys = set()
+    for row in existing[1:]:
+        if len(row) >= 11:
+            existing_keys.add((row[0], row[1], row[10]))
+
+    new_rows = fetch_position_details(api, positions)
+    to_append = []
+    for row in new_rows:
+        key = (str(row[0]), str(row[1]), str(row[10]))
+        if key not in existing_keys:
+            to_append.append(row)
+
+    if to_append:
+        ws.append_rows(to_append, value_input_option='RAW')
+        print(f'永豐交易紀錄：新增 {len(to_append)} 筆')
+    else:
+        print('永豐交易紀錄：無新資料')
 
 
 def main():
     config = load_config()
     api = login_sinopac(config)
-    rows = fetch_positions(api)
-    write_to_sheet(config, rows)
-    print(f'同步完成，共 {len(rows)} 筆')
-    api.logout()
+    try:
+        sh = open_spreadsheet(config)
+        positions, rows = fetch_positions(api)
+        write_positions_to_sheet(sh, rows)
+        print(f'庫存同步完成，共 {len(rows)} 筆')
+        sync_trade_records(sh, api, positions)
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+    finally:
+        try:
+            api.logout()
+        except Exception:
+            pass
+        os._exit(0)
 
 
 if __name__ == '__main__':
