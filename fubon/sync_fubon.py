@@ -1,5 +1,6 @@
 import json
 import sys
+from datetime import datetime, timedelta
 from pathlib import Path
 
 import gspread
@@ -74,35 +75,131 @@ def merge_data(inventories, unrealized):
     return rows
 
 
-def write_to_sheet(config, rows):
-    """用 gspread 寫入 Google Sheet「富邦庫存」工作表"""
+def _enum_name(val):
+    """安全取得 enum 的 name，非 enum 則轉字串"""
+    return val.name if hasattr(val, 'name') else str(val)
+
+
+def open_spreadsheet(config):
+    """建立 Google Sheet 連線，回傳 spreadsheet 物件"""
     creds = Credentials.from_service_account_file(
         config['google_sheet']['credentials_path'],
         scopes=['https://www.googleapis.com/auth/spreadsheets'],
     )
     gc = gspread.authorize(creds)
-    sh = gc.open_by_key(config['google_sheet']['spreadsheet_id'])
+    return gc.open_by_key(config['google_sheet']['spreadsheet_id'])
 
-    # 取得或建立工作表
+
+def write_positions_to_sheet(sh, rows):
+    """寫入庫存到 Google Sheet「富邦庫存」工作表"""
     try:
         ws = sh.worksheet('富邦庫存')
     except gspread.WorksheetNotFound:
         ws = sh.add_worksheet('富邦庫存', rows=100, cols=10)
 
-    # 清除舊資料，寫入標題 + 新資料
     ws.clear()
     header = ['代碼', '庫存股數', '成本價', '未實現損益']
-    ws.update([header] + rows)
+    ws.update([header] + rows, value_input_option='RAW')
+
+
+def sync_trade_records(sh, sdk, account):
+    """查詢近 30 天成交歷史，同步到 Google Sheet「富邦交易紀錄」，只新增不重複的紀錄"""
+    header = ['成交日期', '代碼', '買賣', '成交價', '成交股數', '委託序號']
+
+    try:
+        ws = sh.worksheet('富邦交易紀錄')
+    except gspread.WorksheetNotFound:
+        ws = sh.add_worksheet('富邦交易紀錄', rows=100, cols=len(header))
+        ws.update([header])
+
+    # 查詢近 30 天成交紀錄
+    end_date = datetime.now().strftime('%Y%m%d')
+    start_date = (datetime.now() - timedelta(days=30)).strftime('%Y%m%d')
+    result = sdk.stock.filled_history(account, start_date, end_date)
+    if not result.is_success:
+        print(f'查詢成交歷史失敗：{result.message}')
+        return
+
+    if not result.data:
+        print('富邦交易紀錄：近 30 天無成交')
+        return
+
+    # 讀取既有資料做去重（用所有欄位組成 key 避免遺漏）
+    existing = ws.get_all_values()
+    existing_keys = set()
+    for row in existing[1:]:
+        existing_keys.add(tuple(row))
+
+    to_append = []
+    for item in result.data:
+        # 動態取得所有欄位（首次執行時會印出欄位供確認）
+        attrs = sorted([a for a in dir(item) if not a.startswith('_')])
+        row = [str(getattr(item, a)) for a in attrs]
+        if tuple(row) not in existing_keys:
+            to_append.append(row)
+
+    # 首次有資料時，用實際欄位名更新表頭
+    if to_append:
+        attrs = sorted([a for a in dir(result.data[0]) if not a.startswith('_')])
+        current_header = ws.row_values(1)
+        if current_header != attrs:
+            ws.update([attrs], value_input_option='RAW')
+
+        ws.append_rows(to_append, value_input_option='RAW')
+        print(f'富邦交易紀錄：新增 {len(to_append)} 筆')
+    else:
+        print('富邦交易紀錄：無新資料')
+
+
+def sync_position_snapshot(sh, unrealized_data):
+    """將未實現損益快照同步到 Google Sheet「富邦持倉快照」，每日一筆"""
+    header = ['日期', '代碼', '方向', '庫存股數', '成本價', '未實現獲利', '未實現虧損', '交易類型']
+
+    try:
+        ws = sh.worksheet('富邦持倉快照')
+    except gspread.WorksheetNotFound:
+        ws = sh.add_worksheet('富邦持倉快照', rows=100, cols=len(header))
+        ws.update([header])
+
+    existing = ws.get_all_values()
+    existing_keys = set()
+    for row in existing[1:]:
+        if len(row) >= 2:
+            existing_keys.add((row[0], row[1]))
+
+    to_append = []
+    for item in unrealized_data:
+        key = (str(item.date), str(item.stock_no))
+        if key not in existing_keys:
+            to_append.append([
+                str(item.date),
+                item.stock_no,
+                _enum_name(item.buy_sell),
+                item.today_qty,
+                float(item.cost_price),
+                float(item.unrealized_profit),
+                float(item.unrealized_loss),
+                _enum_name(item.order_type),
+            ])
+
+    if to_append:
+        ws.append_rows(to_append, value_input_option='RAW')
+        print(f'富邦持倉快照：新增 {len(to_append)} 筆')
+    else:
+        print('富邦持倉快照：無新資料')
 
 
 def main():
     config = load_config()
     sdk, account = login_fubon(config)
+    sh = open_spreadsheet(config)
     inventories = fetch_inventories(sdk, account)
     unrealized = fetch_unrealized_pnl(sdk, account)
     rows = merge_data(inventories, unrealized)
-    write_to_sheet(config, rows)
-    print(f'同步完成，共 {len(rows)} 筆')
+    write_positions_to_sheet(sh, rows)
+    print(f'庫存同步完成，共 {len(rows)} 筆')
+    sync_trade_records(sh, sdk, account)
+    sync_position_snapshot(sh, unrealized.values())
 
 
 if __name__ == '__main__':

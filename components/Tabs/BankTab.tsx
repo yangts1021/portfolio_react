@@ -105,6 +105,7 @@ const BankTab: React.FC<BankTabProps> = ({
                   <td className='px-6 py-4'>
                     <input
                       type='text'
+                      key={`${b.bank}-usd-${b.usd}`}
                       defaultValue={fm(b.usd)}
                       onFocus={(e) => {
                         e.target.value = e.target.value.replace(/,/g, '');
@@ -121,6 +122,7 @@ const BankTab: React.FC<BankTabProps> = ({
                   <td className='px-6 py-4'>
                     <input
                       type='text'
+                      key={`${b.bank}-twd-${b.twd}`}
                       defaultValue={fm(b.twd)}
                       onFocus={(e) => {
                         e.target.value = e.target.value.replace(/,/g, '');
@@ -137,6 +139,7 @@ const BankTab: React.FC<BankTabProps> = ({
                   <td className='px-6 py-4'>
                     <input
                       type='text'
+                      key={`${b.bank}-loan-${b.loan}`}
                       defaultValue={fm(b.loan)}
                       onFocus={(e) => {
                         e.target.value = e.target.value.replace(/,/g, '');

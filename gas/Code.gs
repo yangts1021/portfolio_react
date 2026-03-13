@@ -53,7 +53,8 @@ function doGet(e) {
         for (var i = 1; i < data.length; i++) {
           var row = data[i];
           if (row[0] === '') continue;
-          list.push({ bank: row[0], usd: row[1], twd: row[2], loan: row[3] });
+          var toNum = function(v) { return Number(String(v).replace(/,/g, '')) || 0; };
+          list.push({ bank: row[0], usd: toNum(row[1]), twd: toNum(row[2]), loan: toNum(row[3]) });
         }
         result.bankData = list;
       }
