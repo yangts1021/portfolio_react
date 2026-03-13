@@ -22,6 +22,31 @@ const BankTab: React.FC<BankTabProps> = ({
   hideAmounts,
 }) => {
   const fm: typeof formatMoney = hideAmounts ? () => '••••' : formatMoney;
+
+  const refreshBankData = async () => {
+    if (!gasUrl) {
+      showToast('請先設定 Google Apps Script 網址');
+      return;
+    }
+    try {
+      const url = `${gasUrl}${gasUrl.includes('?') ? '&' : '?'}type=bankData&t=${Date.now()}`;
+      const response = await fetch(url);
+      if (!response.ok) throw new Error(`HTTP 錯誤 (${response.status})`);
+      const json = await response.json();
+      if (json.bankData) {
+        const parsed = json.bankData.map((b: any) => ({
+          bank: b.bank,
+          usd: parseFloat(String(b.usd).replace(/,/g, '')) || 0,
+          twd: parseFloat(String(b.twd).replace(/,/g, '')) || 0,
+          loan: parseFloat(String(b.loan).replace(/,/g, '')) || 0,
+        }));
+        setBankData(parsed);
+        showToast('銀行餘額已更新');
+      }
+    } catch (e) {
+      showToast('刷新失敗');
+    }
+  };
   // 分別計算所有銀行的 USD 與 TWD 原始總額
   const totalUSD = bankData.reduce((sum, b) => sum + (b.usd || 0), 0);
   const totalTWD = bankData.reduce((sum, b) => sum + (b.twd || 0), 0);
@@ -79,7 +104,7 @@ const BankTab: React.FC<BankTabProps> = ({
             <i className='fa-solid fa-building-columns text-blue-500 mr-2'></i>銀行系統餘額
           </h3>
           <button
-            onClick={onRefresh}
+            onClick={refreshBankData}
             className='text-xs text-white bg-green-600 hover:bg-green-700 px-3 py-1.5 rounded-md transition-colors shadow-sm'
           >
             <i className='fa-solid fa-rotate mr-1'></i> 刷新
