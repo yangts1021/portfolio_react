@@ -130,6 +130,32 @@ def sync_trade_records(sh, api, positions):
         print('永豐交易紀錄：無新資料')
 
 
+def sync_bank_balance(sh, api):
+    """查詢交割帳戶餘額，更新 Google Sheet 銀行系統餘額"""
+    result = api.account_balance()
+    if result.status.value != 'Fetched':
+        print(f'查詢餘額失敗：{result.errmsg}')
+        return
+
+    balance = result.acc_balance
+
+    try:
+        ws = sh.worksheet('銀行系統餘額')
+    except gspread.WorksheetNotFound:
+        print('找不到「銀行系統餘額」工作表')
+        return
+
+    # 找到永豐大戶那一列
+    rows = ws.col_values(1)
+    for i, name in enumerate(rows):
+        if '永豐' in name:
+            ws.update_cell(i + 1, 3, balance)
+            print(f'永豐銀行餘額已更新：{balance}')
+            return
+
+    print('找不到永豐大戶的列')
+
+
 def main():
     config = load_config()
     api = login_sinopac(config)
@@ -139,6 +165,7 @@ def main():
         write_positions_to_sheet(sh, rows)
         print(f'庫存同步完成，共 {len(rows)} 筆')
         sync_trade_records(sh, api, positions)
+        sync_bank_balance(sh, api)
     except Exception as e:
         import traceback
         traceback.print_exc()
