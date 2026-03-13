@@ -1,6 +1,7 @@
 import json
 import os
 import sys
+import threading
 from pathlib import Path
 
 import gspread
@@ -170,11 +171,16 @@ def main():
         import traceback
         traceback.print_exc()
     finally:
+        sys.stdout.flush()
+        sys.stderr.flush()
+        # logout 可能 hang 住，設定 5 秒後強制退出
+        timer = threading.Timer(5.0, lambda: os._exit(0))
+        timer.daemon = True
+        timer.start()
         try:
             api.logout()
         except Exception:
             pass
-        os._exit(0)
 
 
 if __name__ == '__main__':
