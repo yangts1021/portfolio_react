@@ -1,6 +1,7 @@
 export type ActionType = 'BUY' | 'SELL';
 export type CurrencyType = 'TWD' | 'USD' | 'HKD' | 'JPY';
-export type TabType = 'transactions' | 'overview' | 'bank' | 'pledge' | 'pionex';
+export type TabType = 'transactions' | 'overview' | 'bank' | 'pledge' | 'crypto';
+export type CryptoSubTab = 'pionex' | 'bitfinex';
 export type RateMode = 'manual' | 'auto';
 
 export interface Transaction {
@@ -76,6 +77,14 @@ export interface PionexAsset {
   currentPrice: number;
   account: string;
   type: 'spot' | 'futures';
+}
+
+export interface BitfinexAsset {
+  walletType: string; // 'exchange' | 'margin' | 'funding'
+  coin: string;
+  qty: number;
+  available: number;
+  currentPrice: number;
 }
 
 export interface ExchangeRates {

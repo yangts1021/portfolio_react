@@ -5,6 +5,7 @@ import {
   BankAccount,
   PledgeRecord,
   PionexAsset,
+  BitfinexAsset,
   RateMode,
   ExchangeRates,
 } from './types';
@@ -14,7 +15,7 @@ import TransactionsTab from './components/Tabs/TransactionsTab';
 import OverviewTab from './components/Tabs/OverviewTab';
 import BankTab from './components/Tabs/BankTab';
 import PledgeTab from './components/Tabs/PledgeTab';
-import PionexTab from './components/Tabs/PionexTab';
+import CryptoTab from './components/Tabs/CryptoTab';
 import { AlertModal, ConfirmModal, DataSyncModal } from './components/UI/Modals';
 
 const App: React.FC = () => {
@@ -87,6 +88,11 @@ const App: React.FC = () => {
     return JSON.parse(saved).map((item: any) => ({ ...item, type: item.type || 'spot' }));
   });
 
+  const [bitfinexData, setBitfinexData] = useState<BitfinexAsset[]>(() => {
+    const saved = localStorage.getItem(STORAGE_KEYS.BITFINEX);
+    return saved ? JSON.parse(saved) : [];
+  });
+
   const [rateMode, setRateMode] = useState<RateMode>(() => {
     return (localStorage.getItem(STORAGE_KEYS.RATE_MODE) as RateMode) || 'auto';
   });
@@ -129,6 +135,9 @@ const App: React.FC = () => {
   useEffect(() => {
     localStorage.setItem(STORAGE_KEYS.PIONEX, JSON.stringify(pionexData));
   }, [pionexData]);
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEYS.BITFINEX, JSON.stringify(bitfinexData));
+  }, [bitfinexData]);
   useEffect(() => {
     localStorage.setItem(STORAGE_KEYS.RATE_MODE, rateMode);
   }, [rateMode]);
@@ -223,6 +232,17 @@ const App: React.FC = () => {
           setPionexData(formattedPionex);
         }
 
+        if (json.bitfinexData) {
+          const formattedBitfinex: BitfinexAsset[] = json.bitfinexData.map((row: any) => ({
+            walletType: row.type || row.walletType || 'exchange',
+            coin: String(row.coin).toUpperCase(),
+            qty: parseFloat(row.qty) || 0,
+            available: parseFloat(row.available) || 0,
+            currentPrice: parseFloat(row.currentPrice) || 0,
+          }));
+          setBitfinexData(formattedBitfinex);
+        }
+
         if (!isSilent) {
           showToast('資料同步成功！');
           setIsDataModalOpen(false);
@@ -264,6 +284,7 @@ const App: React.FC = () => {
         setBankData([]);
         setPledgeData([]);
         setPionexData([]);
+        setBitfinexData([]);
         setExchangeRates({ USD: 32.5, HKD: 4.1, JPY: 0.22, TWD: 1 });
         showToast('所有資料已清除');
       },
@@ -331,9 +352,10 @@ const App: React.FC = () => {
               hideAmounts={hideAmounts}
             />
           )}
-          {activeTab === 'pionex' && (
-            <PionexTab
+          {activeTab === 'crypto' && (
+            <CryptoTab
               pionexData={pionexData}
+              bitfinexData={bitfinexData}
               exchangeRates={exchangeRates}
               hideAmounts={hideAmounts}
             />

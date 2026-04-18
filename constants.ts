@@ -19,4 +19,5 @@ export const STORAGE_KEYS = {
   RATES: 'my_exchange_rates',
   RATE_MODE: 'my_rate_mode',
   PIONEX: 'my_pionex_data',
+  BITFINEX: 'my_bitfinex_data',
 };
