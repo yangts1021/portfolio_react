@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Transaction, ActionType, CurrencyType } from '../../types';
 import { BROKERS, CURRENCIES } from '../../constants';
 
@@ -15,18 +15,39 @@ const TransactionsTab: React.FC<TransactionsTabProps> = ({
   gasUrl,
   showToast,
 }) => {
+  const brokerOptions = useMemo(() => {
+    const seen = new Set<string>();
+    const list: string[] = [];
+    transactions.forEach((t) => {
+      const b = (t.broker ?? '').toString().trim();
+      if (b && !seen.has(b)) {
+        seen.add(b);
+        list.push(b);
+      }
+    });
+    list.sort((a, b) => a.localeCompare(b, 'zh-Hant'));
+    return list.length > 0 ? list : [...BROKERS];
+  }, [transactions]);
+
   const [form, setForm] = useState({
     // Use local date string (YYYY-MM-DD)
     date: new Date().toLocaleDateString('en-CA'), // en-CA gives YYYY-MM-DD
     action: 'BUY' as ActionType,
     symbol: '',
-    broker: BROKERS[0],
+    broker: brokerOptions[0],
     qty: '',
     price: '',
     currency: 'TWD' as CurrencyType,
   });
   const [loading, setLoading] = useState(false);
   const [showAll, setShowAll] = useState(false);
+
+  // Keep form.broker valid when the option list changes (e.g. after GAS sync).
+  useEffect(() => {
+    if (!brokerOptions.includes(form.broker)) {
+      setForm((f) => ({ ...f, broker: brokerOptions[0] }));
+    }
+  }, [brokerOptions, form.broker]);
 
   // Sorting and Filtering Logic
   const sortedTransactions = [...transactions].sort((a, b) => {
@@ -164,7 +185,7 @@ const TransactionsTab: React.FC<TransactionsTabProps> = ({
                   onChange={(e) => setForm({ ...form, broker: e.target.value })}
                   className='w-full bg-gray-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg p-2.5 text-sm dark:text-white'
                 >
-                  {BROKERS.map((b) => (
+                  {brokerOptions.map((b) => (
                     <option key={b} value={b}>
                       {b}
                     </option>
