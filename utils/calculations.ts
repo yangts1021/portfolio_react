@@ -28,7 +28,10 @@ export const calculatePortfolio = (
   exchangeRates: ExchangeRates,
 ) => {
   const portfolio: Record<string, PortfolioItem> = {};
-  const brokerMap: Record<string, Record<string, { inventory: number; totalCost: number; avgCost: number }>> = {};
+  const brokerMap: Record<
+    string,
+    Record<string, { inventory: number; totalCost: number; avgCost: number }>
+  > = {};
 
   // Sort by date to ensure accurate average cost calculation
   const sortedTx = [...transactions].sort(

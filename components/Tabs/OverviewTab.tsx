@@ -561,9 +561,7 @@ const OverviewTab: React.FC<OverviewTabProps> = (props) => {
                           >
                             {fm(bd.unrealizedPnLTWD, { maximumFractionDigits: 0 })}
                           </td>
-                          <td
-                            className={`px-4 py-2 text-right font-bold ${getColorClass(bd.roi)}`}
-                          >
+                          <td className={`px-4 py-2 text-right font-bold ${getColorClass(bd.roi)}`}>
                             {bd.roi.toFixed(2)}%
                           </td>
                           <td className='px-4 py-2'></td>
