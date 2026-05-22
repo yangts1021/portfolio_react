@@ -70,7 +70,15 @@ const OverviewTab: React.FC<OverviewTabProps> = (props) => {
   }, [props.pledgeData, props.currentPrices]);
 
   const metrics = useMemo(() => {
-    const activeItems = portfolioItems.filter((p) => p.inventory > 0.000001);
+    const categoryOrder: Record<string, number> = { 原型: 0, 槓桿: 1, 類現金: 2, 其他: 3 };
+    const activeItems = portfolioItems
+      .filter((p) => p.inventory > 0.000001)
+      .sort((a, b) => {
+        const orderA = categoryOrder[a.category] ?? 99;
+        const orderB = categoryOrder[b.category] ?? 99;
+        if (orderA !== orderB) return orderA - orderB;
+        return b.marketValueTWD - a.marketValueTWD;
+      });
     const stockMarketValueTWD = activeItems.reduce((sum, p) => sum + p.marketValueTWD, 0);
     const stockCostTWD = activeItems.reduce(
       (sum, p) => sum + p.totalCost * (props.exchangeRates[p.currency] ?? 1),
