@@ -290,7 +290,7 @@ const OverviewTab: React.FC<OverviewTabProps> = (props) => {
         </div>
         <div className='bg-white dark:bg-gray-900 p-5 rounded-xl shadow-sm border border-gray-100 dark:border-gray-800 text-center transition-colors'>
           <div className='text-gray-500 dark:text-gray-400 text-sm uppercase tracking-wider mb-2 font-medium'>
-            現金類價值
+            銀行總餘額
           </div>
           <div className='text-2xl font-bold dark:text-white'>
             {fm(bankSummary.totalCashTWD, { maximumFractionDigits: 0 })}
