@@ -29,6 +29,9 @@ sinopac/config.json
 sinopac/venv/
 sinopac/*.log
 
+# Runtime logs
+log/
+
 # Misc
 .DS_Store
 .env
