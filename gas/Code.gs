@@ -53,7 +53,9 @@ function doGet(e) {
         for (var i = 1; i < data.length; i++) {
           var row = data[i];
           if (row[0] === '') continue;
-          var toNum = function(v) { return Number(String(v).replace(/,/g, '')) || 0; };
+          var toNum = function (v) {
+            return Number(String(v).replace(/,/g, '')) || 0;
+          };
           list.push({ bank: row[0], usd: toNum(row[1]), twd: toNum(row[2]), loan: toNum(row[3]) });
         }
         result.bankData = list;
@@ -105,6 +107,11 @@ function doGet(e) {
     // 6. 讀取 Pionex 資料
     if (!type || type === 'pionexData') {
       result.pionexData = readPionexFromSheet();
+    }
+
+    // 7. 讀取 Bitfinex 資料
+    if (!type || type === 'bitfinexData') {
+      result.bitfinexData = readBitfinexFromSheet();
     }
 
     return ContentService.createTextOutput(JSON.stringify(result)).setMimeType(
