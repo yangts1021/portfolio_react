@@ -1,4 +1,4 @@
-import { Transaction, PortfolioItem, ExchangeRates } from '../types';
+import { Transaction, PortfolioItem, ExchangeRates, SplitEvent } from '../types';
 
 export const getCategoryFromBeta = (beta: number): string => {
   if (beta < 0.5) return '類現金';
@@ -21,11 +21,30 @@ export const getColorClass = (val: number): string => {
   return 'text-gray-400';
 };
 
+// 某數量在 sinceDate 之後經歷的分割調整（質押股數等用）
+export const applySplitsToQty = (
+  symbol: string,
+  qty: number,
+  sinceDate: string,
+  splitEvents: SplitEvent[],
+): number => {
+  const sym = String(symbol).toUpperCase();
+  const since = new Date(sinceDate).getTime();
+  let adjusted = qty;
+  splitEvents.forEach((sp) => {
+    if (String(sp.symbol).toUpperCase() !== sym) return;
+    if (!(sp.ratio > 0)) return;
+    if (new Date(sp.date).getTime() > since) adjusted *= sp.ratio;
+  });
+  return adjusted;
+};
+
 export const calculatePortfolio = (
   transactions: Transaction[],
   currentPrices: Record<string, number>,
   symbolBetas: Record<string, number>,
   exchangeRates: ExchangeRates,
+  splitEvents: SplitEvent[] = [],
 ) => {
   const portfolio: Record<string, PortfolioItem> = {};
   const brokerMap: Record<
@@ -33,12 +52,40 @@ export const calculatePortfolio = (
     Record<string, { inventory: number; totalCost: number; avgCost: number }>
   > = {};
 
-  // Sort by date to ensure accurate average cost calculation
-  const sortedTx = [...transactions].sort(
-    (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime(),
-  );
+  // 交易與分割事件合併後依時間序處理；同日時分割先套用（生效日當天的交易視為分割後單位）
+  type PortfolioEvent =
+    | { time: number; kind: 'split'; split: SplitEvent }
+    | { time: number; kind: 'tx'; tx: Transaction };
+  const events: PortfolioEvent[] = [
+    ...transactions.map(
+      (tx): PortfolioEvent => ({ time: new Date(tx.date).getTime(), kind: 'tx', tx }),
+    ),
+    ...splitEvents
+      .filter((sp) => sp.ratio > 0)
+      .map(
+        (sp): PortfolioEvent => ({ time: new Date(sp.date).getTime(), kind: 'split', split: sp }),
+      ),
+  ].sort((a, b) => a.time - b.time || (a.kind === 'split' ? 0 : 1) - (b.kind === 'split' ? 0 : 1));
 
-  sortedTx.forEach((tx) => {
+  events.forEach((ev) => {
+    // 分割：庫存股數乘上比例、均價除以比例，成本總額不變，原始交易不動
+    if (ev.kind === 'split') {
+      const sym = String(ev.split.symbol).toUpperCase();
+      const p = portfolio[sym];
+      if (p && p.inventory > 0.000001) {
+        p.inventory *= ev.split.ratio;
+        p.avgCost = p.totalCost / p.inventory;
+      }
+      Object.values(brokerMap[sym] || {}).forEach((b) => {
+        if (b.inventory > 0.000001) {
+          b.inventory *= ev.split.ratio;
+          b.avgCost = b.totalCost / b.inventory;
+        }
+      });
+      return;
+    }
+
+    const tx = ev.tx;
     if (!portfolio[tx.symbol]) {
       const beta = symbolBetas[tx.symbol] ?? 1.0;
       portfolio[tx.symbol] = {

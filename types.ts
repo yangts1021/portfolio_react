@@ -15,6 +15,14 @@ export interface Transaction {
   currency: CurrencyType;
 }
 
+// 股票分割事件：原始交易紀錄不動，計算時依生效日動態調整股數與均價
+export interface SplitEvent {
+  id: number;
+  symbol: string;
+  date: string; // 生效日 YYYY-MM-DD，當日起的交易視為分割後單位
+  ratio: number; // 1 股拆成幾股；反向合併用小數（如 4 併 1 = 0.25）
+}
+
 export interface BankAccount {
   bank: string;
   usd: number;

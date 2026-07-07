@@ -4,6 +4,7 @@ import {
   Transaction,
   BankAccount,
   PledgeRecord,
+  SplitEvent,
   PionexAsset,
   BitfinexAsset,
   RateMode,
@@ -64,6 +65,11 @@ const App: React.FC = () => {
     return saved ? JSON.parse(saved) : [];
   });
 
+  const [splitEvents, setSplitEvents] = useState<SplitEvent[]>(() => {
+    const saved = localStorage.getItem(STORAGE_KEYS.SPLITS);
+    return saved ? JSON.parse(saved) : [];
+  });
+
   const [currentPrices, setCurrentPrices] = useState<Record<string, number>>(() => {
     const saved = localStorage.getItem(STORAGE_KEYS.PRICES);
     return saved ? JSON.parse(saved) : {};
@@ -121,6 +127,9 @@ const App: React.FC = () => {
   useEffect(() => {
     localStorage.setItem(STORAGE_KEYS.PLEDGE, JSON.stringify(pledgeData));
   }, [pledgeData]);
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEYS.SPLITS, JSON.stringify(splitEvents));
+  }, [splitEvents]);
   useEffect(() => {
     localStorage.setItem(STORAGE_KEYS.PRICES, JSON.stringify(currentPrices));
   }, [currentPrices]);
@@ -254,6 +263,16 @@ const App: React.FC = () => {
           setPledgeData(formattedPledge);
         }
 
+        if (json.splitEvents) {
+          const formattedSplits: SplitEvent[] = json.splitEvents.map((row: any, index: number) => ({
+            id: Date.now() + index,
+            symbol: String(row.symbol).toUpperCase(),
+            date: row.date?.split('T')[0] || row.date,
+            ratio: parseFloat(row.ratio),
+          }));
+          setSplitEvents(formattedSplits.filter((s) => s.symbol && s.date && s.ratio > 0));
+        }
+
         if (json.pionexData) {
           const formattedPionex: PionexAsset[] = json.pionexData.map((row: any) => ({
             coin: String(row.coin).toUpperCase(),
@@ -349,6 +368,7 @@ const App: React.FC = () => {
         setSymbolBetas({});
         setBankData([]);
         setPledgeData([]);
+        setSplitEvents([]);
         setPionexData([]);
         setBitfinexData([]);
         setExchangeRates({ USD: 32.5, HKD: 4.1, JPY: 0.22, TWD: 1 });
@@ -376,6 +396,8 @@ const App: React.FC = () => {
             <TransactionsTab
               transactions={transactions}
               setTransactions={setTransactions}
+              splitEvents={splitEvents}
+              setSplitEvents={setSplitEvents}
               gasUrl={gasUrl}
               showToast={showToast}
             />
@@ -388,6 +410,7 @@ const App: React.FC = () => {
               exchangeRates={exchangeRates}
               bankData={bankData}
               pledgeData={pledgeData}
+              splitEvents={splitEvents}
               rateMode={rateMode}
               setRateMode={setRateMode}
               setExchangeRates={setExchangeRates}
@@ -413,6 +436,7 @@ const App: React.FC = () => {
             <PledgeTab
               pledgeData={pledgeData}
               setPledgeData={setPledgeData}
+              splitEvents={splitEvents}
               currentPrices={currentPrices}
               gasUrl={gasUrl}
               showToast={showToast}

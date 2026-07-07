@@ -1,10 +1,11 @@
 import React, { useState, useMemo } from 'react';
-import { PledgeRecord } from '../../types';
-import { formatMoney } from '../../utils/calculations';
+import { PledgeRecord, SplitEvent } from '../../types';
+import { formatMoney, applySplitsToQty } from '../../utils/calculations';
 
 interface PledgeTabProps {
   pledgeData: PledgeRecord[];
   setPledgeData: React.Dispatch<React.SetStateAction<PledgeRecord[]>>;
+  splitEvents: SplitEvent[];
   currentPrices: Record<string, number>;
   gasUrl: string;
   showToast: (msg: string) => void;
@@ -14,6 +15,7 @@ interface PledgeTabProps {
 const PledgeTab: React.FC<PledgeTabProps> = ({
   pledgeData,
   setPledgeData,
+  splitEvents,
   currentPrices,
   gasUrl,
   showToast,
@@ -31,16 +33,21 @@ const PledgeTab: React.FC<PledgeTabProps> = ({
   });
   const [loading, setLoading] = useState(false);
 
+  // 質押股數依匯撥日後發生的分割調整（原始紀錄保持匯撥當時股數）
+  const adjustedQty = (p: PledgeRecord) =>
+    applySplitsToQty(p.symbol, p.qty, p.transferDate, splitEvents);
+
   const { totalLoan, overallRatio } = useMemo(() => {
     let loans = 0;
     let collaterals = 0;
     pledgeData.forEach((p) => {
       loans += p.loanAmount;
       const price = currentPrices[p.symbol] ?? 0;
-      collaterals += p.qty * price;
+      collaterals += adjustedQty(p) * price;
     });
     return { totalLoan: loans, overallRatio: loans > 0 ? (collaterals / loans) * 100 : 0 };
-  }, [pledgeData, currentPrices]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pledgeData, currentPrices, splitEvents]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -212,7 +219,9 @@ const PledgeTab: React.FC<PledgeTabProps> = ({
               </thead>
               <tbody className='divide-y divide-gray-100 dark:divide-gray-800'>
                 {pledgeData.map((p, i) => {
-                  const ratio = ((currentPrices[p.symbol] * p.qty) / p.loanAmount) * 100;
+                  const qty = adjustedQty(p);
+                  const ratio = ((currentPrices[p.symbol] * qty) / p.loanAmount) * 100;
+                  const isAdjusted = qty !== p.qty;
                   return (
                     <tr
                       key={i}
@@ -229,7 +238,15 @@ const PledgeTab: React.FC<PledgeTabProps> = ({
                         {p.symbol}
                         <br />
                         <span className='text-gray-400 dark:text-gray-500 font-normal'>
-                          {p.qty.toLocaleString()}
+                          {qty.toLocaleString()}
+                          {isAdjusted && (
+                            <span
+                              className='ml-1 text-[9px] text-purple-500'
+                              title={`原始 ${p.qty.toLocaleString()} 股，經分割調整`}
+                            >
+                              (分割後)
+                            </span>
+                          )}
                         </span>
                       </td>
                       <td className='px-4 py-4 text-right text-red-600 dark:text-red-400 font-bold'>

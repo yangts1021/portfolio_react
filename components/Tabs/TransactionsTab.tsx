@@ -1,10 +1,12 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Transaction, ActionType, CurrencyType } from '../../types';
+import { Transaction, ActionType, CurrencyType, SplitEvent } from '../../types';
 import { BROKERS, CURRENCIES } from '../../constants';
 
 interface TransactionsTabProps {
   transactions: Transaction[];
   setTransactions: React.Dispatch<React.SetStateAction<Transaction[]>>;
+  splitEvents: SplitEvent[];
+  setSplitEvents: React.Dispatch<React.SetStateAction<SplitEvent[]>>;
   gasUrl: string;
   showToast: (msg: string) => void;
 }
@@ -12,6 +14,8 @@ interface TransactionsTabProps {
 const TransactionsTab: React.FC<TransactionsTabProps> = ({
   transactions,
   setTransactions,
+  splitEvents,
+  setSplitEvents,
   gasUrl,
   showToast,
 }) => {
@@ -41,6 +45,60 @@ const TransactionsTab: React.FC<TransactionsTabProps> = ({
   });
   const [loading, setLoading] = useState(false);
   const [showAll, setShowAll] = useState(false);
+
+  // 股票分割事件表單：原始交易不動，計算時依生效日調整
+  const [splitForm, setSplitForm] = useState({
+    symbol: '',
+    date: new Date().toLocaleDateString('en-CA'),
+    ratio: '',
+  });
+  const [splitLoading, setSplitLoading] = useState(false);
+
+  const handleSplitSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const ratio = parseFloat(splitForm.ratio);
+    if (!splitForm.symbol || !splitForm.date || !(ratio > 0)) return;
+
+    const newSplit: SplitEvent = {
+      id: Date.now(),
+      symbol: splitForm.symbol.toUpperCase().trim(),
+      date: splitForm.date,
+      ratio,
+    };
+    setSplitEvents((prev) => [...prev, newSplit]);
+    setSplitForm((f) => ({ ...f, symbol: '', ratio: '' }));
+
+    if (gasUrl) {
+      setSplitLoading(true);
+      try {
+        await fetch(gasUrl, {
+          method: 'POST',
+          mode: 'no-cors',
+          headers: { 'Content-Type': 'text/plain' },
+          body: JSON.stringify({
+            type: 'addSplit',
+            symbol: newSplit.symbol,
+            date: newSplit.date,
+            ratio: newSplit.ratio,
+          }),
+        });
+        showToast(`${newSplit.symbol} 分割事件已新增並同步雲端`);
+      } catch (err) {
+        showToast('分割事件已存於本地（雲端同步失敗）');
+      } finally {
+        setSplitLoading(false);
+      }
+    } else {
+      showToast('分割事件已新增');
+    }
+  };
+
+  const deleteSplit = (id: number) => {
+    if (confirm('確定要刪除本地分割事件嗎？（Google Sheet 需手動刪除）')) {
+      setSplitEvents((prev) => prev.filter((s) => s.id !== id));
+      showToast('分割事件已移除');
+    }
+  };
 
   // Keep form.broker valid when the option list changes (e.g. after GAS sync).
   useEffect(() => {
@@ -130,123 +188,216 @@ const TransactionsTab: React.FC<TransactionsTabProps> = ({
   return (
     <div className='grid grid-cols-1 lg:grid-cols-3 gap-6 animate-fade-in'>
       <div className='lg:col-span-1'>
-        <div className='bg-white dark:bg-gray-900 rounded-xl shadow-sm p-6 border border-gray-100 dark:border-gray-800 sticky top-6'>
-          <h2 className='text-lg font-bold mb-4 flex items-center dark:text-white'>
-            <i className='fa-solid fa-plus-circle text-blue-500 mr-2'></i> 新增交易
-          </h2>
-          <form onSubmit={handleSubmit} className='space-y-4'>
-            <div className='grid grid-cols-2 gap-4'>
-              <div>
-                <label className='block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1'>
-                  日期
-                </label>
-                <input
-                  type='date'
-                  value={form.date}
-                  onChange={(e) => setForm({ ...form, date: e.target.value })}
-                  required
-                  className='w-full bg-gray-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg p-2.5 text-sm dark:text-white'
-                />
+        <div className='sticky top-6 space-y-6'>
+          <div className='bg-white dark:bg-gray-900 rounded-xl shadow-sm p-6 border border-gray-100 dark:border-gray-800'>
+            <h2 className='text-lg font-bold mb-4 flex items-center dark:text-white'>
+              <i className='fa-solid fa-plus-circle text-blue-500 mr-2'></i> 新增交易
+            </h2>
+            <form onSubmit={handleSubmit} className='space-y-4'>
+              <div className='grid grid-cols-2 gap-4'>
+                <div>
+                  <label className='block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1'>
+                    日期
+                  </label>
+                  <input
+                    type='date'
+                    value={form.date}
+                    onChange={(e) => setForm({ ...form, date: e.target.value })}
+                    required
+                    className='w-full bg-gray-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg p-2.5 text-sm dark:text-white'
+                  />
+                </div>
+                <div>
+                  <label className='block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1'>
+                    動作
+                  </label>
+                  <select
+                    value={form.action}
+                    onChange={(e) => setForm({ ...form, action: e.target.value as ActionType })}
+                    className={`w-full border border-gray-300 dark:border-gray-700 rounded-lg p-2.5 text-sm ${form.action === 'BUY' ? 'bg-red-600 text-white' : 'bg-green-600 text-white'}`}
+                  >
+                    <option value='BUY'>買入 (Buy)</option>
+                    <option value='SELL'>賣出 (Sell)</option>
+                  </select>
+                </div>
+              </div>
+              <div className='grid grid-cols-2 gap-4'>
+                <div>
+                  <label className='block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1'>
+                    代碼
+                  </label>
+                  <input
+                    type='text'
+                    placeholder='2330, AAPL'
+                    value={form.symbol}
+                    onChange={(e) => setForm({ ...form, symbol: e.target.value })}
+                    required
+                    className='uppercase w-full bg-gray-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg p-2.5 text-sm dark:text-white'
+                  />
+                </div>
+                <div>
+                  <label className='block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1'>
+                    券商
+                  </label>
+                  <select
+                    value={form.broker}
+                    onChange={(e) => setForm({ ...form, broker: e.target.value })}
+                    className='w-full bg-gray-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg p-2.5 text-sm dark:text-white'
+                  >
+                    {brokerOptions.map((b) => (
+                      <option key={b} value={b}>
+                        {b}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+              <div className='grid grid-cols-2 gap-4'>
+                <div>
+                  <label className='block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1'>
+                    股數
+                  </label>
+                  <input
+                    type='text'
+                    inputMode='decimal'
+                    value={form.qty}
+                    onChange={(e) => handleNumberChange('qty', e.target.value)}
+                    required
+                    placeholder='0'
+                    className='w-full bg-gray-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg p-2.5 text-sm dark:text-white font-mono'
+                  />
+                </div>
+                <div>
+                  <label className='block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1'>
+                    成交單價
+                  </label>
+                  <input
+                    type='text'
+                    inputMode='decimal'
+                    value={form.price}
+                    onChange={(e) => handleNumberChange('price', e.target.value)}
+                    required
+                    placeholder='0.00'
+                    className='w-full bg-gray-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg p-2.5 text-sm dark:text-white font-mono'
+                  />
+                </div>
               </div>
               <div>
                 <label className='block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1'>
-                  動作
+                  幣別
                 </label>
                 <select
-                  value={form.action}
-                  onChange={(e) => setForm({ ...form, action: e.target.value as ActionType })}
-                  className={`w-full border border-gray-300 dark:border-gray-700 rounded-lg p-2.5 text-sm ${form.action === 'BUY' ? 'bg-red-600 text-white' : 'bg-green-600 text-white'}`}
-                >
-                  <option value='BUY'>買入 (Buy)</option>
-                  <option value='SELL'>賣出 (Sell)</option>
-                </select>
-              </div>
-            </div>
-            <div className='grid grid-cols-2 gap-4'>
-              <div>
-                <label className='block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1'>
-                  代碼
-                </label>
-                <input
-                  type='text'
-                  placeholder='2330, AAPL'
-                  value={form.symbol}
-                  onChange={(e) => setForm({ ...form, symbol: e.target.value })}
-                  required
-                  className='uppercase w-full bg-gray-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg p-2.5 text-sm dark:text-white'
-                />
-              </div>
-              <div>
-                <label className='block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1'>
-                  券商
-                </label>
-                <select
-                  value={form.broker}
-                  onChange={(e) => setForm({ ...form, broker: e.target.value })}
+                  value={form.currency}
+                  onChange={(e) => setForm({ ...form, currency: e.target.value as CurrencyType })}
                   className='w-full bg-gray-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg p-2.5 text-sm dark:text-white'
                 >
-                  {brokerOptions.map((b) => (
-                    <option key={b} value={b}>
-                      {b}
+                  {CURRENCIES.map((c) => (
+                    <option key={c} value={c}>
+                      {c}
                     </option>
                   ))}
                 </select>
               </div>
-            </div>
-            <div className='grid grid-cols-2 gap-4'>
-              <div>
-                <label className='block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1'>
-                  股數
-                </label>
-                <input
-                  type='text'
-                  inputMode='decimal'
-                  value={form.qty}
-                  onChange={(e) => handleNumberChange('qty', e.target.value)}
-                  required
-                  placeholder='0'
-                  className='w-full bg-gray-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg p-2.5 text-sm dark:text-white font-mono'
-                />
-              </div>
-              <div>
-                <label className='block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1'>
-                  成交單價
-                </label>
-                <input
-                  type='text'
-                  inputMode='decimal'
-                  value={form.price}
-                  onChange={(e) => handleNumberChange('price', e.target.value)}
-                  required
-                  placeholder='0.00'
-                  className='w-full bg-gray-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg p-2.5 text-sm dark:text-white font-mono'
-                />
-              </div>
-            </div>
-            <div>
-              <label className='block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1'>
-                幣別
-              </label>
-              <select
-                value={form.currency}
-                onChange={(e) => setForm({ ...form, currency: e.target.value as CurrencyType })}
-                className='w-full bg-gray-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg p-2.5 text-sm dark:text-white'
+              <button
+                type='submit'
+                disabled={loading}
+                className='w-full text-white bg-blue-600 hover:bg-blue-700 font-medium rounded-lg text-sm px-5 py-3 flex justify-center items-center transition-all'
               >
-                {CURRENCIES.map((c) => (
-                  <option key={c} value={c}>
-                    {c}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <button
-              type='submit'
-              disabled={loading}
-              className='w-full text-white bg-blue-600 hover:bg-blue-700 font-medium rounded-lg text-sm px-5 py-3 flex justify-center items-center transition-all'
-            >
-              {loading ? <i className='fa-solid fa-circle-notch fa-spin'></i> : '新增紀錄'}
-            </button>
-          </form>
+                {loading ? <i className='fa-solid fa-circle-notch fa-spin'></i> : '新增紀錄'}
+              </button>
+            </form>
+          </div>
+
+          <div className='bg-white dark:bg-gray-900 rounded-xl shadow-sm p-6 border border-gray-100 dark:border-gray-800'>
+            <h2 className='text-lg font-bold mb-1 flex items-center dark:text-white'>
+              <i className='fa-solid fa-arrows-split-up-and-left text-purple-500 mr-2'></i> 股票分割
+            </h2>
+            <p className='text-[11px] text-gray-400 dark:text-gray-500 mb-4'>
+              原始交易紀錄不變，自生效日起持股與均價依比例調整
+            </p>
+            <form onSubmit={handleSplitSubmit} className='space-y-3'>
+              <div className='grid grid-cols-3 gap-3'>
+                <div>
+                  <label className='block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1'>
+                    代碼
+                  </label>
+                  <input
+                    type='text'
+                    placeholder='00631L'
+                    value={splitForm.symbol}
+                    onChange={(e) => setSplitForm({ ...splitForm, symbol: e.target.value })}
+                    required
+                    className='uppercase w-full bg-gray-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg p-2.5 text-sm dark:text-white'
+                  />
+                </div>
+                <div>
+                  <label className='block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1'>
+                    生效日
+                  </label>
+                  <input
+                    type='date'
+                    value={splitForm.date}
+                    onChange={(e) => setSplitForm({ ...splitForm, date: e.target.value })}
+                    required
+                    className='w-full bg-gray-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg p-2.5 text-sm dark:text-white'
+                  />
+                </div>
+                <div>
+                  <label className='block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1'>
+                    1 拆 N
+                  </label>
+                  <input
+                    type='number'
+                    step='any'
+                    min='0.01'
+                    placeholder='4'
+                    value={splitForm.ratio}
+                    onChange={(e) => setSplitForm({ ...splitForm, ratio: e.target.value })}
+                    required
+                    className='w-full bg-gray-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg p-2.5 text-sm dark:text-white font-mono'
+                  />
+                </div>
+              </div>
+              <button
+                type='submit'
+                disabled={splitLoading}
+                className='w-full text-white bg-purple-600 hover:bg-purple-700 font-medium rounded-lg text-sm px-5 py-2.5 flex justify-center items-center transition-all'
+              >
+                {splitLoading ? (
+                  <i className='fa-solid fa-circle-notch fa-spin'></i>
+                ) : (
+                  '新增分割事件'
+                )}
+              </button>
+            </form>
+
+            {splitEvents.length > 0 && (
+              <div className='mt-4 space-y-2'>
+                {[...splitEvents]
+                  .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+                  .map((s) => (
+                    <div
+                      key={s.id}
+                      className='flex items-center justify-between text-xs bg-gray-50 dark:bg-gray-800 rounded-lg px-3 py-2'
+                    >
+                      <span className='font-bold text-purple-600 dark:text-purple-400'>
+                        {s.symbol}
+                      </span>
+                      <span className='text-gray-500 dark:text-gray-400'>{s.date}</span>
+                      <span className='font-mono dark:text-gray-300'>
+                        {s.ratio >= 1 ? `1 拆 ${s.ratio}` : `${1 / s.ratio} 併 1`}
+                      </span>
+                      <button
+                        onClick={() => deleteSplit(s.id)}
+                        className='text-gray-400 hover:text-red-500'
+                      >
+                        <i className='fa-solid fa-trash-can'></i>
+                      </button>
+                    </div>
+                  ))}
+              </div>
+            )}
+          </div>
         </div>
       </div>
 

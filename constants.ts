@@ -15,6 +15,7 @@ export const STORAGE_KEYS = {
   BETAS: 'my_symbol_betas',
   BANK: 'my_bank_data',
   PLEDGE: 'my_pledge_data',
+  SPLITS: 'my_split_events',
   GAS_URL: 'my_gas_url',
   RATES: 'my_exchange_rates',
   RATE_MODE: 'my_rate_mode',

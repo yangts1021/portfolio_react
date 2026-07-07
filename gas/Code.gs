@@ -114,7 +114,24 @@ function doGet(e) {
       result.bitfinexData = readBitfinexFromSheet();
     }
 
-    // 8. 台股即時價格（TWSE MIS API 代理，本機 Fubon 伺服器的備援）
+    // 8. 讀取分割事件
+    if (!type || type === 'splitEvents') {
+      var sheet = ss.getSheetByName('分割事件');
+      if (sheet) {
+        var data = sheet.getDataRange().getValues();
+        var list = [];
+        for (var i = 1; i < data.length; i++) {
+          var row = data[i];
+          if (row[0] === '') continue;
+          list.push({ symbol: row[0], date: row[1], ratio: row[2] });
+        }
+        result.splitEvents = list;
+      } else {
+        result.splitEvents = [];
+      }
+    }
+
+    // 9. 台股即時價格（TWSE MIS API 代理，本機 Fubon 伺服器的備援）
     if (type === 'twPrices') {
       var misResult = fetchTwPricesFromMis(String(e.parameter.symbols || ''));
       result.twPrices = misResult.prices;
@@ -271,6 +288,25 @@ function doPost(e) {
         sheet.getRange(rowIndex, 3).setValue(data.beta);
       }
       return ContentService.createTextOutput('Success: Beta Updated');
+    }
+
+    // === 新增分割事件 ===
+    else if (data.type === 'addSplit') {
+      var sheet = ss.getSheetByName('分割事件');
+      if (!sheet) {
+        // 工作表不存在就自動建立
+        sheet = ss.insertSheet('分割事件');
+        sheet.getRange(1, 1, 1, 3).setValues([['標的', '生效日', '比例']]);
+      }
+
+      var symbolStr = String(data.symbol);
+      if (!symbolStr.startsWith("'")) {
+        symbolStr = "'" + symbolStr;
+      }
+
+      var lastRow = sheet.getRange('A1:A').getValues().filter(String).length;
+      sheet.getRange(lastRow + 1, 1, 1, 3).setValues([[symbolStr, data.date, data.ratio]]);
+      return ContentService.createTextOutput('Success: Split Added');
     }
 
     // === 新增質押紀錄 ===

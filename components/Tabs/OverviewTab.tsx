@@ -4,12 +4,18 @@ import {
   Transaction,
   BankAccount,
   PledgeRecord,
+  SplitEvent,
   RateMode,
   ExchangeRates,
   PortfolioItem,
 } from '../../types';
 import { CATEGORY_COLORS } from '../../constants';
-import { calculatePortfolio, formatMoney, getColorClass } from '../../utils/calculations';
+import {
+  calculatePortfolio,
+  applySplitsToQty,
+  formatMoney,
+  getColorClass,
+} from '../../utils/calculations';
 
 interface OverviewTabProps {
   transactions: Transaction[];
@@ -18,6 +24,7 @@ interface OverviewTabProps {
   exchangeRates: ExchangeRates;
   bankData: BankAccount[];
   pledgeData: PledgeRecord[];
+  splitEvents: SplitEvent[];
   rateMode: RateMode;
   setRateMode: (mode: RateMode) => void;
   setExchangeRates: React.Dispatch<React.SetStateAction<ExchangeRates>>;
@@ -80,8 +87,15 @@ const OverviewTab: React.FC<OverviewTabProps> = (props) => {
       props.currentPrices,
       props.symbolBetas,
       props.exchangeRates,
+      props.splitEvents,
     );
-  }, [props.transactions, props.currentPrices, props.symbolBetas, props.exchangeRates]);
+  }, [
+    props.transactions,
+    props.currentPrices,
+    props.symbolBetas,
+    props.exchangeRates,
+    props.splitEvents,
+  ]);
 
   const bankSummary = useMemo(() => {
     const usd = props.bankData.reduce((sum, b) => sum + (b.usd || 0), 0);
@@ -96,11 +110,12 @@ const OverviewTab: React.FC<OverviewTabProps> = (props) => {
     let totalCollateral = 0;
     props.pledgeData.forEach((p) => {
       const price = props.currentPrices[p.symbol] ?? 0;
-      totalCollateral += p.qty * price;
+      const qty = applySplitsToQty(p.symbol, p.qty, p.transferDate, props.splitEvents);
+      totalCollateral += qty * price;
     });
     const ratio = totalLoan > 0 ? (totalCollateral / totalLoan) * 100 : 0;
     return { totalLoan, totalCollateral, ratio };
-  }, [props.pledgeData, props.currentPrices]);
+  }, [props.pledgeData, props.currentPrices, props.splitEvents]);
 
   const metrics = useMemo(() => {
     const categoryOrder: Record<string, number> = { 原型: 0, 槓桿: 1, 類現金: 2, 其他: 3 };
