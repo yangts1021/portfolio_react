@@ -116,7 +116,17 @@ function doGet(e) {
 
     // 8. 台股即時價格（TWSE MIS API 代理，本機 Fubon 伺服器的備援）
     if (type === 'twPrices') {
-      result.twPrices = fetchTwPricesFromMis(String(e.parameter.symbols || ''));
+      var misResult = fetchTwPricesFromMis(String(e.parameter.symbols || ''));
+      result.twPrices = misResult.prices;
+      result.twSource = 'mis';
+      // MIS 從 Google 機房打不通時，退回讀 Sheet 的 GOOGLEFINANCE 價格（約 15 分鐘延遲）
+      if (Object.keys(misResult.prices).length === 0) {
+        result.twPrices = readTwPricesFromSheet(ss, String(e.parameter.symbols || ''));
+        result.twSource = 'sheet';
+      }
+      if (e.parameter.debug) {
+        result.twDebug = misResult.debug;
+      }
     }
 
     return ContentService.createTextOutput(JSON.stringify(result)).setMimeType(
@@ -129,7 +139,7 @@ function doGet(e) {
   }
 }
 
-// 呼叫 TWSE MIS 即時行情 API，回傳 { symbol: price }
+// 呼叫 TWSE MIS 即時行情 API，回傳 { prices: { symbol: price }, debug: {...} }
 // 上市/上櫃無法事先區分，同一代碼同時查 tse_ 與 otc_ 頻道，無效的會被 API 忽略
 function fetchTwPricesFromMis(symbolsCsv) {
   var symbols = symbolsCsv
@@ -139,7 +149,7 @@ function fetchTwPricesFromMis(symbolsCsv) {
       return s.trim().toUpperCase();
     })
     .filter(String);
-  if (symbols.length === 0) return {};
+  if (symbols.length === 0) return { prices: {}, debug: { reason: 'no symbols' } };
 
   var channels = [];
   symbols.forEach(function (s) {
@@ -151,10 +161,25 @@ function fetchTwPricesFromMis(symbolsCsv) {
     'https://mis.twse.com.tw/stock/api/getStockInfo.jsp?ex_ch=' +
     encodeURIComponent(channels.join('|')) +
     '&json=1&delay=0';
-  var res = UrlFetchApp.fetch(url, { muteHttpExceptions: true });
-  if (res.getResponseCode() !== 200) return {};
 
-  var json = JSON.parse(res.getContentText());
+  var res;
+  try {
+    res = UrlFetchApp.fetch(url, { muteHttpExceptions: true });
+  } catch (err) {
+    return { prices: {}, debug: { reason: 'fetch threw', error: String(err) } };
+  }
+  var code = res.getResponseCode();
+  var body = res.getContentText();
+  if (code !== 200) {
+    return { prices: {}, debug: { reason: 'non-200', code: code, body: body.slice(0, 300) } };
+  }
+
+  var json;
+  try {
+    json = JSON.parse(body);
+  } catch (err) {
+    return { prices: {}, debug: { reason: 'bad json', body: body.slice(0, 300) } };
+  }
   var prices = {};
   (json.msgArray || []).forEach(function (m) {
     var sym = String(m.c || '').toUpperCase();
@@ -165,6 +190,28 @@ function fetchTwPricesFromMis(symbolsCsv) {
     if (!price || isNaN(price)) price = parseFloat(m.y);
     if (price && !isNaN(price)) prices[sym] = price;
   });
+  return {
+    prices: prices,
+    debug: { reason: 'ok', rtmessage: json.rtmessage, count: (json.msgArray || []).length },
+  };
+}
+
+// 從 Sheet「即時價格與beta」讀取指定代碼的價格（GOOGLEFINANCE，約 15 分鐘延遲）
+function readTwPricesFromSheet(ss, symbolsCsv) {
+  var sheet = ss.getSheetByName('即時價格與beta');
+  if (!sheet) return {};
+  var wanted = {};
+  symbolsCsv.split(',').forEach(function (s) {
+    s = s.trim().toUpperCase();
+    if (s) wanted[s] = true;
+  });
+  var rows = sheet.getDataRange().getValues();
+  var prices = {};
+  for (var i = 1; i < rows.length; i++) {
+    var sym = String(rows[i][0]).trim().toUpperCase();
+    var price = parseFloat(rows[i][1]);
+    if (wanted[sym] && price && !isNaN(price)) prices[sym] = price;
+  }
   return prices;
 }
 

@@ -169,8 +169,11 @@ const App: React.FC = () => {
       const { prices, source } = await fetchTwPrices(twSymbols, gasUrl);
       if (source) {
         setCurrentPrices((prev) => ({ ...prev, ...prices }));
-        if (!isSilent)
-          showToast(source === 'fubon' ? '台股價格已更新（富邦即時）' : '台股價格已更新（TWSE）');
+        if (!isSilent) {
+          const sourceLabel =
+            source === 'fubon' ? '富邦即時' : source === 'twse' ? 'TWSE' : 'Sheet 延遲價';
+          showToast(`台股價格已更新（${sourceLabel}）`);
+        }
       } else if (!isSilent) {
         showToast('台股價格更新失敗：本機伺服器與 TWSE 備援皆無回應');
       }

@@ -3,7 +3,7 @@
 const LOCAL_PRICE_SERVER = 'http://127.0.0.1:8787';
 const LOCAL_TIMEOUT_MS = 2000;
 
-export type TwPriceSource = 'fubon' | 'twse';
+export type TwPriceSource = 'fubon' | 'twse' | 'sheet';
 
 export interface TwPriceResult {
   prices: Record<string, number>;
@@ -40,14 +40,14 @@ export const fetchTwPrices = async (symbols: string[], gasUrl: string): Promise<
     // 本機伺服器沒開，改走備援
   }
 
-  // 2. GAS 代理 TWSE MIS API（約 5 秒延遲）
+  // 2. GAS 代理 TWSE MIS API（約 5 秒延遲）；MIS 不通時 GAS 會回 Sheet 的 GOOGLEFINANCE 價
   if (gasUrl) {
     try {
       const res = await fetch(`${gasUrl}?type=twPrices&symbols=${query}`);
       if (res.ok) {
         const json = await res.json();
         if (json.twPrices && Object.keys(json.twPrices).length > 0) {
-          return { prices: json.twPrices, source: 'twse' };
+          return { prices: json.twPrices, source: json.twSource === 'sheet' ? 'sheet' : 'twse' };
         }
       }
     } catch {
