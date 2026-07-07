@@ -264,12 +264,18 @@ const App: React.FC = () => {
         }
 
         if (json.splitEvents) {
-          const formattedSplits: SplitEvent[] = json.splitEvents.map((row: any, index: number) => ({
-            id: Date.now() + index,
-            symbol: String(row.symbol).toUpperCase(),
-            date: row.date?.split('T')[0] || row.date,
-            ratio: parseFloat(row.ratio),
-          }));
+          const formattedSplits: SplitEvent[] = json.splitEvents.map((row: any, index: number) => {
+            // Sheet 日期會序列化成 UTC ISO（台北午夜 = 前一天 16:00Z），需依本地時區轉回正確日期
+            let dateStr = row.date;
+            const d = new Date(dateStr);
+            if (!isNaN(d.getTime())) dateStr = d.toLocaleDateString('en-CA');
+            return {
+              id: Date.now() + index,
+              symbol: String(row.symbol).toUpperCase(),
+              date: dateStr,
+              ratio: parseFloat(row.ratio),
+            };
+          });
           setSplitEvents(formattedSplits.filter((s) => s.symbol && s.date && s.ratio > 0));
         }
 
