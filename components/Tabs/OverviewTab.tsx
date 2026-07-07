@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip as RechartsTooltip } from 'recharts';
 import {
   Transaction,
@@ -23,9 +23,42 @@ interface OverviewTabProps {
   setExchangeRates: React.Dispatch<React.SetStateAction<ExchangeRates>>;
   onRefresh: () => void;
   onRefreshRate: () => void;
+  onBetaChange: (symbol: string, beta: number) => void;
   isDarkMode: boolean;
   hideAmounts: boolean;
 }
+
+// 可編輯的 beta 輸入框：失焦或按 Enter 時提交
+const BetaInput: React.FC<{ value: number; onCommit: (v: number) => void }> = ({
+  value,
+  onCommit,
+}) => {
+  const [text, setText] = useState(String(value));
+  useEffect(() => {
+    setText(String(value));
+  }, [value]);
+
+  const commit = () => {
+    const v = parseFloat(text);
+    if (!isNaN(v) && v !== value) onCommit(v);
+    else setText(String(value));
+  };
+
+  return (
+    <input
+      type='number'
+      step='0.1'
+      value={text}
+      onChange={(e) => setText(e.target.value)}
+      onBlur={commit}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+      }}
+      onClick={(e) => e.stopPropagation()}
+      className='w-16 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded p-1 text-right font-mono dark:text-gray-200 outline-none focus:ring-1 focus:ring-blue-500 transition-all'
+    />
+  );
+};
 
 const OverviewTab: React.FC<OverviewTabProps> = (props) => {
   const [showSoldOut, setShowSoldOut] = useState(false);
@@ -458,6 +491,7 @@ const OverviewTab: React.FC<OverviewTabProps> = (props) => {
               <tr>
                 <th className='px-4 py-3'>分類</th>
                 <th className='px-4 py-3'>標的代碼</th>
+                <th className='px-4 py-3 text-right'>Beta</th>
                 <th className='px-4 py-3 text-right'>現有股數</th>
                 <th className='px-4 py-3 text-right bg-yellow-50 dark:bg-yellow-900/10'>
                   即時市價
@@ -507,6 +541,12 @@ const OverviewTab: React.FC<OverviewTabProps> = (props) => {
                           </span>
                         ) : null}
                       </td>
+                      <td className='px-4 py-4 text-right' onClick={(e) => e.stopPropagation()}>
+                        <BetaInput
+                          value={p.beta}
+                          onCommit={(v) => props.onBetaChange(p.symbol, v)}
+                        />
+                      </td>
                       <td className='px-4 py-4 text-right font-mono'>
                         {p.inventory.toLocaleString(undefined, { maximumFractionDigits: 4 })}
                       </td>
@@ -549,6 +589,7 @@ const OverviewTab: React.FC<OverviewTabProps> = (props) => {
                             <i className='fa-solid fa-building-columns mr-1.5 text-[9px]'></i>
                             {bd.broker}
                           </td>
+                          <td className='px-4 py-2'></td>
                           <td className='px-4 py-2 text-right font-mono text-gray-500 dark:text-gray-400'>
                             {bd.inventory.toLocaleString(undefined, { maximumFractionDigits: 4 })}
                           </td>
@@ -583,7 +624,7 @@ const OverviewTab: React.FC<OverviewTabProps> = (props) => {
                 onClick={() => setShowSoldOut(!showSoldOut)}
               >
                 <td
-                  colSpan={9}
+                  colSpan={10}
                   className='px-4 py-2 text-center text-[10px] text-gray-500 dark:text-gray-400 font-bold uppercase tracking-wider'
                 >
                   <i className={`fa-solid fa-chevron-${showSoldOut ? 'up' : 'down'} mr-2`}></i>
@@ -600,7 +641,7 @@ const OverviewTab: React.FC<OverviewTabProps> = (props) => {
                     >
                       <td className='px-4 py-4 text-[10px]'>{p.category}</td>
                       <td className='px-4 py-4'>{p.symbol}</td>
-                      <td colSpan={5}></td>
+                      <td colSpan={6}></td>
                       <td
                         className={`px-4 py-4 text-right font-bold ${getColorClass(p.realizedPnL)}`}
                       >

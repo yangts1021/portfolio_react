@@ -10,6 +10,7 @@ import {
   ExchangeRates,
 } from './types';
 import { STORAGE_KEYS } from './constants';
+import { fetchTwPrices, isTwMarketHours } from './utils/marketData';
 import Navbar from './components/Layout/Navbar';
 import TransactionsTab from './components/Tabs/TransactionsTab';
 import OverviewTab from './components/Tabs/OverviewTab';
@@ -147,6 +148,36 @@ const App: React.FC = () => {
     setTimeout(() => setToasts((prev) => prev.slice(1)), 3000);
   }, []);
 
+  // 持有中的台股標的（TWD 交易 + 質押標的），用來查即時價格
+  const twSymbols = useMemo(() => {
+    const netQty: Record<string, number> = {};
+    transactions.forEach((t) => {
+      if (t.currency !== 'TWD') return;
+      netQty[t.symbol] = (netQty[t.symbol] || 0) + (t.action === 'BUY' ? t.qty : -t.qty);
+    });
+    const symbols = new Set(Object.keys(netQty).filter((s) => netQty[s] > 0.000001));
+    pledgeData.forEach((p) => {
+      if (p.symbol) symbols.add(String(p.symbol).toUpperCase());
+    });
+    return Array.from(symbols);
+  }, [transactions, pledgeData]);
+
+  // 台股即時價格：本機 Fubon 伺服器優先，GAS 代理 TWSE MIS 備援
+  const refreshTwPrices = useCallback(
+    async (isSilent = false) => {
+      if (twSymbols.length === 0) return;
+      const { prices, source } = await fetchTwPrices(twSymbols, gasUrl);
+      if (source) {
+        setCurrentPrices((prev) => ({ ...prev, ...prices }));
+        if (!isSilent)
+          showToast(source === 'fubon' ? '台股價格已更新（富邦即時）' : '台股價格已更新（TWSE）');
+      } else if (!isSilent) {
+        showToast('台股價格更新失敗：本機伺服器與 TWSE 備援皆無回應');
+      }
+    },
+    [twSymbols, gasUrl, showToast],
+  );
+
   const fetchDataFromGAS = useCallback(
     async (isSilent = false) => {
       if (!gasUrl) {
@@ -247,11 +278,14 @@ const App: React.FC = () => {
           showToast('資料同步成功！');
           setIsDataModalOpen(false);
         }
+
+        // Sheet 的價格可能是舊的，同步完再用 API 覆寫台股即時價
+        refreshTwPrices(isSilent);
       } catch (error: any) {
         if (!isSilent) setAlertConfig({ title: '同步失敗', message: error.message });
       }
     },
-    [gasUrl, showToast],
+    [gasUrl, showToast, refreshTwPrices],
   );
 
   const fetchExchangeRate = useCallback(async () => {
@@ -271,8 +305,37 @@ const App: React.FC = () => {
   useEffect(() => {
     if (rateMode === 'auto') fetchExchangeRate();
     if (gasUrl && rateMode === 'auto') fetchDataFromGAS(true);
+    else refreshTwPrices(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // 盤中每 60 秒自動更新台股價格
+  useEffect(() => {
+    const id = setInterval(() => {
+      if (isTwMarketHours()) refreshTwPrices(true);
+    }, 60000);
+    return () => clearInterval(id);
+  }, [refreshTwPrices]);
+
+  // 手動修改 beta：更新本地狀態並回寫 Google Sheet
+  const handleBetaUpdate = useCallback(
+    (symbol: string, beta: number) => {
+      setSymbolBetas((prev) => ({ ...prev, [symbol]: beta }));
+      if (gasUrl) {
+        fetch(gasUrl, {
+          method: 'POST',
+          mode: 'no-cors',
+          headers: { 'Content-Type': 'text/plain' },
+          body: JSON.stringify({ type: 'updateBeta', symbol, beta }),
+        })
+          .then(() => showToast(`${symbol} beta 已更新並回寫雲端`))
+          .catch(() => showToast(`${symbol} beta 已更新（雲端回寫失敗）`));
+      } else {
+        showToast(`${symbol} beta 已更新`);
+      }
+    },
+    [gasUrl, showToast],
+  );
 
   const clearAllData = () => {
     setConfirmConfig({
@@ -326,6 +389,7 @@ const App: React.FC = () => {
               setRateMode={setRateMode}
               setExchangeRates={setExchangeRates}
               onRefresh={fetchDataFromGAS}
+              onBetaChange={handleBetaUpdate}
               onRefreshRate={fetchExchangeRate}
               isDarkMode={isDarkMode}
               hideAmounts={hideAmounts}

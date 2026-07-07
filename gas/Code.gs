@@ -114,6 +114,11 @@ function doGet(e) {
       result.bitfinexData = readBitfinexFromSheet();
     }
 
+    // 8. 台股即時價格（TWSE MIS API 代理，本機 Fubon 伺服器的備援）
+    if (type === 'twPrices') {
+      result.twPrices = fetchTwPricesFromMis(String(e.parameter.symbols || ''));
+    }
+
     return ContentService.createTextOutput(JSON.stringify(result)).setMimeType(
       ContentService.MimeType.JSON,
     );
@@ -122,6 +127,45 @@ function doGet(e) {
       ContentService.MimeType.JSON,
     );
   }
+}
+
+// 呼叫 TWSE MIS 即時行情 API，回傳 { symbol: price }
+// 上市/上櫃無法事先區分，同一代碼同時查 tse_ 與 otc_ 頻道，無效的會被 API 忽略
+function fetchTwPricesFromMis(symbolsCsv) {
+  var symbols = symbolsCsv
+    .split(',')
+    .map(function (s) {
+      // MIS API 對代碼大小寫敏感（如 00631L 必須大寫）
+      return s.trim().toUpperCase();
+    })
+    .filter(String);
+  if (symbols.length === 0) return {};
+
+  var channels = [];
+  symbols.forEach(function (s) {
+    channels.push('tse_' + s + '.tw');
+    channels.push('otc_' + s + '.tw');
+  });
+
+  var url =
+    'https://mis.twse.com.tw/stock/api/getStockInfo.jsp?ex_ch=' +
+    encodeURIComponent(channels.join('|')) +
+    '&json=1&delay=0';
+  var res = UrlFetchApp.fetch(url, { muteHttpExceptions: true });
+  if (res.getResponseCode() !== 200) return {};
+
+  var json = JSON.parse(res.getContentText());
+  var prices = {};
+  (json.msgArray || []).forEach(function (m) {
+    var sym = String(m.c || '').toUpperCase();
+    if (!sym) return;
+    // z: 最近成交價；盤中無成交時退回 pz(前一筆成交)、y(昨收)
+    var price = parseFloat(m.z);
+    if (!price || isNaN(price)) price = parseFloat(m.pz);
+    if (!price || isNaN(price)) price = parseFloat(m.y);
+    if (price && !isNaN(price)) prices[sym] = price;
+  });
+  return prices;
 }
 
 // 處理寫入 (POST)
@@ -154,6 +198,32 @@ function doPost(e) {
         sheet.getRange(rowIndex, 2, 1, 3).setValues([[data.usd, data.twd, data.loan]]);
       }
       return ContentService.createTextOutput('Success: Bank Updated');
+    }
+
+    // === 更新標的 beta ===
+    else if (data.type === 'updateBeta') {
+      var sheet = ss.getSheetByName('即時價格與beta');
+      if (!sheet)
+        return ContentService.createTextOutput("Error: Sheet '即時價格與beta' not found.");
+
+      var rows = sheet.getDataRange().getValues();
+      var target = String(data.symbol).trim().toUpperCase();
+      var rowIndex = -1;
+      for (var i = 1; i < rows.length; i++) {
+        if (String(rows[i][0]).trim().toUpperCase() === target) {
+          rowIndex = i + 1;
+          break;
+        }
+      }
+
+      if (rowIndex === -1) {
+        // 新標的：補一列（B 欄價格留空）
+        var lastRow = sheet.getRange('A1:A').getValues().filter(String).length;
+        sheet.getRange(lastRow + 1, 1, 1, 3).setValues([["'" + data.symbol, '', data.beta]]);
+      } else {
+        sheet.getRange(rowIndex, 3).setValue(data.beta);
+      }
+      return ContentService.createTextOutput('Success: Beta Updated');
     }
 
     // === 新增質押紀錄 ===
