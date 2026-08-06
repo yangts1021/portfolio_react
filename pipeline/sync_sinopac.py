@@ -12,11 +12,8 @@ def login_sinopac(config):
     """用 API Key 登入永豐 Shioaji，回傳 api 物件"""
     cfg = config['sinopac']
     api = sj.Shioaji()
-    accounts = api.login(
-        cfg['api_key'],
-        cfg['secret_key'],
-        contracts_timeout=10000,
-    )
+    # shioaji 1.7 起移除 contracts_timeout，登入參數只剩 api_key / secret_key
+    accounts = api.login(cfg['api_key'], cfg['secret_key'])
     if not accounts:
         print('登入失敗：請確認 API Key 和 Secret Key')
         sys.exit(1)
