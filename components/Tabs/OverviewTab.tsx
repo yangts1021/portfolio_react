@@ -16,10 +16,12 @@ import {
   formatMoney,
   getColorClass,
 } from '../../utils/calculations';
+import { PriceQuoteMeta, quoteSourceLabel } from '../../utils/marketData';
 
 interface OverviewTabProps {
   transactions: Transaction[];
   currentPrices: Record<string, number>;
+  priceMeta: Record<string, PriceQuoteMeta>;
   symbolBetas: Record<string, number>;
   exchangeRates: ExchangeRates;
   bankData: BankAccount[];
@@ -34,6 +36,34 @@ interface OverviewTabProps {
   isDarkMode: boolean;
   hideAmounts: boolean;
 }
+
+// 報價來源的顏色：即時來源綠色、代理來源藍色、降級（快取或延遲價）黃色
+const QUOTE_SOURCE_STYLE: Record<string, string> = {
+  fubon: 'text-emerald-600 dark:text-emerald-400',
+  yfinance: 'text-emerald-600 dark:text-emerald-400',
+  twse_mis: 'text-blue-500 dark:text-blue-400',
+  cache: 'text-amber-600 dark:text-amber-400',
+  googlefinance: 'text-amber-600 dark:text-amber-400',
+};
+
+// 價格下方的來源標示，滑過顯示完整報價時間
+const QuoteSourceTag: React.FC<{ meta?: PriceQuoteMeta }> = ({ meta }) => {
+  if (!meta?.source) return null;
+  const ts = meta.quoteTs ? new Date(meta.quoteTs) : null;
+  const valid = ts && !isNaN(ts.getTime());
+  const clock = valid
+    ? ts.toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit', hour12: false })
+    : '';
+  return (
+    <div
+      className={`text-[9px] font-normal mt-0.5 ${QUOTE_SOURCE_STYLE[meta.source] || 'text-gray-400 dark:text-gray-500'}`}
+      title={valid ? `報價時間 ${ts.toLocaleString('zh-TW', { hour12: false })}` : undefined}
+    >
+      {quoteSourceLabel(meta.source)}
+      {clock && ` ${clock}`}
+    </div>
+  );
+};
 
 // 可編輯的 beta 輸入框：失焦或按 Enter 時提交
 const BetaInput: React.FC<{ value: number; onCommit: (v: number) => void }> = ({
@@ -570,6 +600,7 @@ const OverviewTab: React.FC<OverviewTabProps> = (props) => {
                           minimumFractionDigits: 2,
                           maximumFractionDigits: 2,
                         })}
+                        <QuoteSourceTag meta={props.priceMeta[p.symbol]} />
                       </td>
                       <td className='px-4 py-4 text-right font-mono font-bold text-gray-800 dark:text-gray-100'>
                         {fm(p.marketValueTWD, { maximumFractionDigits: 0 })}

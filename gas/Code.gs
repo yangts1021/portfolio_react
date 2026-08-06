@@ -138,6 +138,7 @@ function doGet(e) {
       if (Object.keys(live.prices).length > 0) {
         result.twPrices = live.prices;
         result.twSource = 'live';
+        result.twMeta = live.meta; // 每檔的來源與報價時間
         result.twUpdatedAt = live.updatedAt;
       } else {
         var misResult = fetchTwPricesFromMis(symbolsCsv);
@@ -241,6 +242,7 @@ function readLivePricesFromSheet(ss, symbolsCsv) {
 
   var rows = sheet.getDataRange().getValues();
   var prices = {};
+  var meta = {};
   var updatedAt = '';
   for (var i = 1; i < rows.length; i++) {
     var sym = String(rows[i][0]).trim().toUpperCase();
@@ -249,10 +251,11 @@ function readLivePricesFromSheet(ss, symbolsCsv) {
     var price = parseFloat(rows[i][2]);
     if (!price || isNaN(price)) continue;
     prices[sym] = price;
+    meta[sym] = { source: String(rows[i][5] || ''), quoteTs: String(rows[i][6] || '') };
     var updated = String(rows[i][7] || '');
     if (updated > updatedAt) updatedAt = updated;
   }
-  return { prices: prices, updatedAt: updatedAt };
+  return { prices: prices, meta: meta, updatedAt: updatedAt };
 }
 
 // 從 Sheet「即時價格與beta」讀取指定代碼的價格（GOOGLEFINANCE，約 15 分鐘延遲）

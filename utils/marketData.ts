@@ -4,8 +4,15 @@
 
 export type PriceSource = 'live' | 'twse' | 'sheet';
 
+// 每檔報價的出處。live 來源直接沿用「即時報價」的來源欄，備援路徑則整批同源
+export interface PriceQuoteMeta {
+  source: string; // fubon / twse_mis / yfinance / cache / googlefinance
+  quoteTs?: string;
+}
+
 export interface PriceResult {
   prices: Record<string, number>;
+  meta: Record<string, PriceQuoteMeta>;
   source: PriceSource | null;
   updatedAt?: string;
 }
@@ -16,8 +23,20 @@ export const PRICE_SOURCE_LABEL: Record<PriceSource, string> = {
   sheet: 'Sheet 延遲價',
 };
 
+// 單檔來源顯示用的短標籤
+export const QUOTE_SOURCE_LABEL: Record<string, string> = {
+  fubon: '富邦',
+  twse_mis: 'TWSE',
+  yfinance: 'yfinance',
+  cache: '快取',
+  googlefinance: 'Sheet',
+};
+
+export const quoteSourceLabel = (source?: string): string =>
+  (source && QUOTE_SOURCE_LABEL[source]) || source || '';
+
 export const fetchPrices = async (symbols: string[], gasUrl: string): Promise<PriceResult> => {
-  if (symbols.length === 0 || !gasUrl) return { prices: {}, source: null };
+  if (symbols.length === 0 || !gasUrl) return { prices: {}, meta: {}, source: null };
   const query = encodeURIComponent(symbols.join(','));
 
   try {
@@ -27,14 +46,23 @@ export const fetchPrices = async (symbols: string[], gasUrl: string): Promise<Pr
       if (json.twPrices && Object.keys(json.twPrices).length > 0) {
         const source: PriceSource =
           json.twSource === 'live' ? 'live' : json.twSource === 'sheet' ? 'sheet' : 'twse';
-        return { prices: json.twPrices, source, updatedAt: json.twUpdatedAt };
+        // 備援路徑沒有逐檔來源，整批標成同一個出處；
+        // live 但缺 twMeta（GAS 還沒更新）時不標，以免標錯
+        const batchSource =
+          source === 'sheet' ? 'googlefinance' : source === 'twse' ? 'twse_mis' : '';
+        const meta: Record<string, PriceQuoteMeta> = {};
+        Object.keys(json.twPrices).forEach((sym) => {
+          const entry = json.twMeta?.[sym] || (batchSource ? { source: batchSource } : null);
+          if (entry) meta[sym] = entry;
+        });
+        return { prices: json.twPrices, meta, source, updatedAt: json.twUpdatedAt };
       }
     }
   } catch {
     // 網路或 GAS 失敗，回傳空結果讓呼叫端提示
   }
 
-  return { prices: {}, source: null };
+  return { prices: {}, meta: {}, source: null };
 };
 
 // 台股交易時段（含開盤前試撮與收盤後緩衝）：平日 08:55–14:00

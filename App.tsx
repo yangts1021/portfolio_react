@@ -11,7 +11,7 @@ import {
   ExchangeRates,
 } from './types';
 import { STORAGE_KEYS } from './constants';
-import { fetchPrices, isMarketHours, PRICE_SOURCE_LABEL } from './utils/marketData';
+import { fetchPrices, isMarketHours, PRICE_SOURCE_LABEL, PriceQuoteMeta } from './utils/marketData';
 import Navbar from './components/Layout/Navbar';
 import TransactionsTab from './components/Tabs/TransactionsTab';
 import OverviewTab from './components/Tabs/OverviewTab';
@@ -75,6 +75,12 @@ const App: React.FC = () => {
     return saved ? JSON.parse(saved) : {};
   });
 
+  // 每檔價格的出處（富邦 / TWSE / yfinance / 快取），持倉明細用來標示來源
+  const [priceMeta, setPriceMeta] = useState<Record<string, PriceQuoteMeta>>(() => {
+    const saved = localStorage.getItem(STORAGE_KEYS.PRICE_META);
+    return saved ? JSON.parse(saved) : {};
+  });
+
   const [symbolBetas, setSymbolBetas] = useState<Record<string, number>>(() => {
     const saved = localStorage.getItem(STORAGE_KEYS.BETAS);
     return saved ? JSON.parse(saved) : {};
@@ -134,6 +140,9 @@ const App: React.FC = () => {
     localStorage.setItem(STORAGE_KEYS.PRICES, JSON.stringify(currentPrices));
   }, [currentPrices]);
   useEffect(() => {
+    localStorage.setItem(STORAGE_KEYS.PRICE_META, JSON.stringify(priceMeta));
+  }, [priceMeta]);
+  useEffect(() => {
     localStorage.setItem(STORAGE_KEYS.BETAS, JSON.stringify(symbolBetas));
   }, [symbolBetas]);
   useEffect(() => {
@@ -175,9 +184,10 @@ const App: React.FC = () => {
   const refreshPrices = useCallback(
     async (isSilent = false) => {
       if (priceSymbols.length === 0) return;
-      const { prices, source } = await fetchPrices(priceSymbols, gasUrl);
+      const { prices, meta, source } = await fetchPrices(priceSymbols, gasUrl);
       if (source) {
         setCurrentPrices((prev) => ({ ...prev, ...prices }));
+        setPriceMeta((prev) => ({ ...prev, ...meta }));
         if (!isSilent) showToast(`價格已更新（${PRICE_SOURCE_LABEL[source]}）`);
       } else if (!isSilent) {
         showToast('價格更新失敗：雲端沒有回應');
@@ -367,6 +377,7 @@ const App: React.FC = () => {
       onConfirm: () => {
         setTransactions([]);
         setCurrentPrices({});
+        setPriceMeta({});
         setSymbolBetas({});
         setBankData([]);
         setPledgeData([]);
@@ -408,6 +419,7 @@ const App: React.FC = () => {
             <OverviewTab
               transactions={transactions}
               currentPrices={currentPrices}
+              priceMeta={priceMeta}
               symbolBetas={symbolBetas}
               exchangeRates={exchangeRates}
               bankData={bankData}
