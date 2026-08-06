@@ -1,22 +1,11 @@
-import json
 import os
 import sys
 import threading
-from pathlib import Path
 
 import gspread
-from google.oauth2.service_account import Credentials
 import shioaji as sj
 
-
-def load_config():
-    """讀取 config.json"""
-    config_path = Path(__file__).parent / 'config.json'
-    if not config_path.exists():
-        print('錯誤：找不到 config.json，請複製 config.example.json 並填入設定')
-        sys.exit(1)
-    with open(config_path, encoding='utf-8') as f:
-        return json.load(f)
+from common import enum_name, get_or_create_worksheet, load_config, open_spreadsheet
 
 
 def login_sinopac(config):
@@ -35,21 +24,6 @@ def login_sinopac(config):
     return api
 
 
-def open_spreadsheet(config):
-    """建立 Google Sheet 連線，回傳 spreadsheet 物件"""
-    creds = Credentials.from_service_account_file(
-        config['google_sheet']['credentials_path'],
-        scopes=['https://www.googleapis.com/auth/spreadsheets'],
-    )
-    gc = gspread.authorize(creds)
-    return gc.open_by_key(config['google_sheet']['spreadsheet_id'])
-
-
-def _enum_name(val):
-    """安全取得 enum 的 name，非 enum 則轉字串"""
-    return val.name if hasattr(val, 'name') else str(val)
-
-
 def fetch_positions(api):
     """查詢股票庫存，回傳 (positions 原始物件, 寫入 Sheet 的資料列)"""
     positions = api.list_positions(api.stock_account)
@@ -57,23 +31,19 @@ def fetch_positions(api):
     for pos in positions:
         rows.append([
             pos.code,
-            _enum_name(pos.direction),
+            enum_name(pos.direction),
             pos.quantity * 1000,
             float(pos.price),
             float(pos.last_price),
             float(pos.pnl),
-            _enum_name(pos.cond),
+            enum_name(pos.cond),
         ])
     return positions, rows
 
 
 def write_positions_to_sheet(sh, rows):
     """寫入庫存到 Google Sheet「永豐庫存」工作表"""
-    try:
-        ws = sh.worksheet('永豐庫存')
-    except gspread.WorksheetNotFound:
-        ws = sh.add_worksheet('永豐庫存', rows=100, cols=10)
-
+    ws = get_or_create_worksheet(sh, '永豐庫存')
     ws.clear()
     header = ['代碼', '方向', '庫存股數', '成本均價', '現價', '未實現損益', '交易類型']
     ws.update([header] + rows, value_input_option='RAW')
@@ -88,14 +58,14 @@ def fetch_position_details(api, positions):
             rows.append([
                 str(d.date),
                 d.code,
-                _enum_name(d.direction),
+                enum_name(d.direction),
                 d.quantity * 1000,
                 float(d.price),
                 float(d.last_price),
                 float(d.pnl),
                 float(d.fee),
-                _enum_name(d.currency),
-                _enum_name(d.cond),
+                enum_name(d.currency),
+                enum_name(d.cond),
                 d.dseq,
             ])
     return rows
@@ -105,11 +75,7 @@ def sync_trade_records(sh, api, positions):
     """將交易明細同步到 Google Sheet「永豐交易紀錄」，只新增不重複的紀錄"""
     header = ['日期', '代碼', '方向', '股數', '成本價', '現價', '損益', '手續費', '幣別', '交易類型', '委託序號']
 
-    try:
-        ws = sh.worksheet('永豐交易紀錄')
-    except gspread.WorksheetNotFound:
-        ws = sh.add_worksheet('永豐交易紀錄', rows=100, cols=len(header))
-        ws.update([header])
+    ws = get_or_create_worksheet(sh, '永豐交易紀錄', header)
 
     existing = ws.get_all_values()
     existing_keys = set()

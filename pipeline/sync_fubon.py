@@ -1,21 +1,15 @@
-import json
 import sys
 from datetime import datetime, timedelta
-from pathlib import Path
 
-import gspread
-from google.oauth2.service_account import Credentials
 from fubon_neo.sdk import FubonSDK
 
-
-def load_config():
-    """讀取 config.json"""
-    config_path = Path(__file__).parent / 'config.json'
-    if not config_path.exists():
-        print('錯誤：找不到 config.json，請複製 config.example.json 並填入設定')
-        sys.exit(1)
-    with open(config_path, encoding='utf-8') as f:
-        return json.load(f)
+from common import (
+    enum_name,
+    get_or_create_worksheet,
+    load_config,
+    open_spreadsheet,
+    resolve_path,
+)
 
 
 def login_fubon(config):
@@ -25,7 +19,7 @@ def login_fubon(config):
     accounts = sdk.apikey_login(
         cfg['id'],
         cfg['api_key'],
-        cfg['cert_path'],
+        str(resolve_path(cfg['cert_path'])),
         cfg.get('cert_password', ''),
     )
     if not accounts.is_success:
@@ -75,28 +69,9 @@ def merge_data(inventories, unrealized):
     return rows
 
 
-def _enum_name(val):
-    """安全取得 enum 的 name，非 enum 則轉字串"""
-    return val.name if hasattr(val, 'name') else str(val)
-
-
-def open_spreadsheet(config):
-    """建立 Google Sheet 連線，回傳 spreadsheet 物件"""
-    creds = Credentials.from_service_account_file(
-        config['google_sheet']['credentials_path'],
-        scopes=['https://www.googleapis.com/auth/spreadsheets'],
-    )
-    gc = gspread.authorize(creds)
-    return gc.open_by_key(config['google_sheet']['spreadsheet_id'])
-
-
 def write_positions_to_sheet(sh, rows):
     """寫入庫存到 Google Sheet「富邦庫存」工作表"""
-    try:
-        ws = sh.worksheet('富邦庫存')
-    except gspread.WorksheetNotFound:
-        ws = sh.add_worksheet('富邦庫存', rows=100, cols=10)
-
+    ws = get_or_create_worksheet(sh, '富邦庫存')
     ws.clear()
     header = ['代碼', '庫存股數', '成本價', '未實現損益']
     ws.update([header] + rows, value_input_option='RAW')
@@ -106,11 +81,7 @@ def sync_trade_records(sh, sdk, account):
     """查詢近 30 天成交歷史，同步到 Google Sheet「富邦交易紀錄」，只新增不重複的紀錄"""
     header = ['成交日期', '代碼', '買賣', '成交價', '成交股數', '委託序號']
 
-    try:
-        ws = sh.worksheet('富邦交易紀錄')
-    except gspread.WorksheetNotFound:
-        ws = sh.add_worksheet('富邦交易紀錄', rows=100, cols=len(header))
-        ws.update([header])
+    ws = get_or_create_worksheet(sh, '富邦交易紀錄', header)
 
     # 查詢近 30 天成交紀錄
     end_date = datetime.now().strftime('%Y%m%d')
@@ -155,11 +126,7 @@ def sync_position_snapshot(sh, unrealized_data):
     """將未實現損益快照同步到 Google Sheet「富邦持倉快照」，每日一筆"""
     header = ['日期', '代碼', '方向', '庫存股數', '成本價', '未實現獲利', '未實現虧損', '交易類型']
 
-    try:
-        ws = sh.worksheet('富邦持倉快照')
-    except gspread.WorksheetNotFound:
-        ws = sh.add_worksheet('富邦持倉快照', rows=100, cols=len(header))
-        ws.update([header])
+    ws = get_or_create_worksheet(sh, '富邦持倉快照', header)
 
     existing = ws.get_all_values()
     existing_keys = set()
@@ -174,12 +141,12 @@ def sync_position_snapshot(sh, unrealized_data):
             to_append.append([
                 str(item.date),
                 item.stock_no,
-                _enum_name(item.buy_sell),
+                enum_name(item.buy_sell),
                 item.today_qty,
                 float(item.cost_price),
                 float(item.unrealized_profit),
                 float(item.unrealized_loss),
-                _enum_name(item.order_type),
+                enum_name(item.order_type),
             ])
 
     if to_append:

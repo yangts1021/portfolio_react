@@ -1,0 +1,7 @@
+gspread
+google-auth
+requests
+yfinance
+shioaji
+# fubon_neo 官方未上 PyPI，用 vendor/ 內的 wheel 安裝：
+#   ./venv/bin/pip install vendor/fubon_neo-*.whl

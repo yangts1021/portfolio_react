@@ -15,19 +15,16 @@ build
 # Google Apps Script
 gas/.clasp.json
 
-# Fubon 設定與憑證
-fubon/config.json
-fubon/*.json
-!fubon/config.example.json
+# pipeline 設定、憑證與執行階段檔案
+pipeline/config.json
+pipeline/credentials/
+pipeline/venv/
+pipeline/prices.db
+pipeline/log/
+pipeline/*.log
 *.pfx
 *.p12
 *.whl
-fubon/log/
-
-# Sinopac 設定與憑證
-sinopac/config.json
-sinopac/venv/
-sinopac/*.log
 
 # Runtime logs
 log/
@@ -52,3 +49,7 @@ pnpm-debug.log*
 *.sln
 *.sw?
 shioaji.log
+
+# Python
+__pycache__/
+*.pyc

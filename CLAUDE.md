@@ -30,6 +30,8 @@ React 18 + TypeScript SPA for investment portfolio tracking. UI is in Traditiona
 - `types.ts` — All shared TypeScript interfaces (`Transaction`, `BankAccount`, `PledgeRecord`, `PortfolioItem`, currency/action union types)
 - `constants.ts` — localStorage key names
 
+**Data pipeline (`pipeline/`):** Local Python scripts that feed the Google Sheet — the web app never talks to brokers or quote vendors directly. `sync_fubon.py` / `sync_sinopac.py` push broker positions and trades; `fetch_prices.py` replaces GOOGLEFINANCE by writing the 「即時報價」 worksheet (TW via fubon_neo → TWSE MIS, US via yfinance, `prices.db` as last-known-price cache). All three share `common.py`, one `config.json` and one `venv`. Scheduled by launchd (`com.portfolio.prices` every 180s during market hours, `com.portfolio.sync` daily at 14:00). See `pipeline/README.md`.
+
 **Tabs:**
 
 - `TransactionsTab` — Add/view buy/sell records, sorted display with "show all" toggle

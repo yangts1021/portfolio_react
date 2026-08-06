@@ -131,18 +131,26 @@ function doGet(e) {
       }
     }
 
-    // 9. 台股即時價格（TWSE MIS API 代理，本機 Fubon 伺服器的備援）
+    // 9. 即時價格：優先讀本機 pipeline 寫入的「即時報價」，其次 MIS，最後 GOOGLEFINANCE
     if (type === 'twPrices') {
-      var misResult = fetchTwPricesFromMis(String(e.parameter.symbols || ''));
-      result.twPrices = misResult.prices;
-      result.twSource = 'mis';
-      // MIS 從 Google 機房打不通時，退回讀 Sheet 的 GOOGLEFINANCE 價格（約 15 分鐘延遲）
-      if (Object.keys(misResult.prices).length === 0) {
-        result.twPrices = readTwPricesFromSheet(ss, String(e.parameter.symbols || ''));
-        result.twSource = 'sheet';
-      }
-      if (e.parameter.debug) {
-        result.twDebug = misResult.debug;
+      var symbolsCsv = String(e.parameter.symbols || '');
+      var live = readLivePricesFromSheet(ss, symbolsCsv);
+      if (Object.keys(live.prices).length > 0) {
+        result.twPrices = live.prices;
+        result.twSource = 'live';
+        result.twUpdatedAt = live.updatedAt;
+      } else {
+        var misResult = fetchTwPricesFromMis(symbolsCsv);
+        result.twPrices = misResult.prices;
+        result.twSource = 'mis';
+        // MIS 從 Google 機房打不通時，退回讀 Sheet 的 GOOGLEFINANCE 價格（約 15 分鐘延遲）
+        if (Object.keys(misResult.prices).length === 0) {
+          result.twPrices = readTwPricesFromSheet(ss, symbolsCsv);
+          result.twSource = 'sheet';
+        }
+        if (e.parameter.debug) {
+          result.twDebug = misResult.debug;
+        }
       }
     }
 
@@ -211,6 +219,40 @@ function fetchTwPricesFromMis(symbolsCsv) {
     prices: prices,
     debug: { reason: 'ok', rtmessage: json.rtmessage, count: (json.msgArray || []).length },
   };
+}
+
+// 從 Sheet「即時報價」讀取價格。這張表由本機 pipeline/fetch_prices.py 定期寫入
+// （台股走富邦、美股走 yfinance），欄位：代號 名稱 價格 昨收 幣別 來源 報價時間 更新時間
+function readLivePricesFromSheet(ss, symbolsCsv) {
+  var sheet = ss.getSheetByName('即時報價');
+  if (!sheet) return { prices: {}, updatedAt: '' };
+
+  var wanted = {};
+  var hasFilter = false;
+  String(symbolsCsv)
+    .split(',')
+    .forEach(function (s) {
+      s = s.trim().toUpperCase();
+      if (s) {
+        wanted[s] = true;
+        hasFilter = true;
+      }
+    });
+
+  var rows = sheet.getDataRange().getValues();
+  var prices = {};
+  var updatedAt = '';
+  for (var i = 1; i < rows.length; i++) {
+    var sym = String(rows[i][0]).trim().toUpperCase();
+    if (!sym) continue;
+    if (hasFilter && !wanted[sym]) continue;
+    var price = parseFloat(rows[i][2]);
+    if (!price || isNaN(price)) continue;
+    prices[sym] = price;
+    var updated = String(rows[i][7] || '');
+    if (updated > updatedAt) updatedAt = updated;
+  }
+  return { prices: prices, updatedAt: updatedAt };
 }
 
 // 從 Sheet「即時價格與beta」讀取指定代碼的價格（GOOGLEFINANCE，約 15 分鐘延遲）

@@ -1,3 +1,0 @@
-shioaji
-gspread
-google-auth

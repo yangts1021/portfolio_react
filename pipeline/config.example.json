@@ -1,0 +1,16 @@
+{
+  "google_sheet": {
+    "spreadsheet_id": "試算表 ID",
+    "credentials_path": "credentials/service-account.json"
+  },
+  "fubon": {
+    "id": "身分證字號",
+    "api_key": "富邦 API Key",
+    "cert_path": "credentials/憑證.p12",
+    "cert_password": "憑證密碼"
+  },
+  "sinopac": {
+    "api_key": "永豐 API Key",
+    "secret_key": "永豐 Secret Key"
+  }
+}
