@@ -27,10 +27,9 @@ React 18 + TypeScript SPA for investment portfolio tracking. UI is in Traditiona
 **Key modules:**
 
 - `utils/calculations.ts` — `calculatePortfolio()` is the core function: processes transactions chronologically, computes average cost, inventory, realized/unrealized P&L, converts to TWD via exchange rates. Also has `getCategoryFromBeta()` for risk categorization and `formatMoney()` for number display.
-- `types.ts` — All shared TypeScript interfaces (`Transaction`, `BankAccount`, `PledgeRecord`, `PortfolioItem`, currency/action union types)
+- `utils/marketData.ts` — `fetchPrices()` pulls quotes for held symbols (TW + US) through GAS `?type=twPrices`, returns `{prices, source, updatedAt}` where source is `live` / `twse` / `sheet`. Also market-hours helpers used by the 60s polling effect in `App.tsx`.
+- `types.ts` — All shared TypeScript interfaces (`Transaction`, `BankAccount`, `PledgeRecord`, `PortfolioItem`, `SplitEvent`, currency/action union types)
 - `constants.ts` — localStorage key names
-
-**Data pipeline (`pipeline/`):** Local Python scripts that feed the Google Sheet — the web app never talks to brokers or quote vendors directly. `sync_fubon.py` / `sync_sinopac.py` push broker positions and trades; `fetch_prices.py` replaces GOOGLEFINANCE by writing the 「即時報價」 worksheet (TW via fubon_neo → TWSE MIS, US via yfinance, `prices.db` as last-known-price cache). All three share `common.py`, one `config.json` and one `venv`. Scheduled by launchd (`com.portfolio.prices` every 180s during market hours, `com.portfolio.sync` daily at 14:00). See `pipeline/README.md`.
 
 **Tabs:**
 
@@ -38,6 +37,36 @@ React 18 + TypeScript SPA for investment portfolio tracking. UI is in Traditiona
 - `OverviewTab` — Portfolio analysis: P&L table, pie chart (Recharts), cash summary, exchange rates, beta-weighted allocation
 - `BankTab` — Multi-currency bank account management with inline editing
 - `PledgeTab` — Stock pledge/collateral loan tracking with auto-calculated repayment dates
+
+## Data Pipeline (`pipeline/`)
+
+Local Python scripts that feed the Google Sheet. **The web app never talks to brokers or quote vendors directly** — everything reaches the browser through GAS reading the Sheet, which is why phones and off-network clients see the same data.
+
+| Script | Does | Writes to |
+| --- | --- | --- |
+| `sync_fubon.py` | Fubon positions, last-30-day fills, unrealized P&L snapshot | 「富邦庫存」「富邦交易紀錄」「富邦持倉快照」 |
+| `sync_sinopac.py` | Sinopac positions, trade details, settlement balance | 「永豐庫存」「永豐交易紀錄」「銀行系統餘額」 |
+| `fetch_prices.py` | Holding quotes, replaces `GOOGLEFINANCE()` | 「即時報價」 + `prices.db` |
+| `common.py` | Shared config loading, Sheet auth, worksheet access | — |
+
+**Price fallback chain** — every symbol always resolves to a number:
+
+```
+TW  fubon_neo → TWSE MIS → prices.db last-known price
+US  yfinance            → prices.db last-known price
+```
+
+Quote rows carry `來源` and `報價時間` so the UI can show freshness instead of rendering a stale value silently. The symbol list is **not** hardcoded: `resolve_holdings()` derives it from the 「股票交易紀錄」 sheet (net qty > 0) plus 「質押借貸資料」, so a new transaction is picked up on the next run. Sold-out symbols stop updating but their rows stay as last-known price. HKD/JPY holdings are skipped (yfinance needs exchange suffixes) and keep their 「即時價格與beta」 price.
+
+**Read path:** GAS `?type=twPrices` tries 「即時報價」 first (`twSource: "live"`), falls back to proxying TWSE MIS (`"mis"`), then to GOOGLEFINANCE values in 「即時價格與beta」 (`"sheet"`). MIS is unreliable from Google datacenter IPs — that intermittent block is why the local fetcher exists.
+
+**Environment:** all three scripts share one `pipeline/venv` (Python 3.14), one `config.json` (`google_sheet` / `fubon` / `sinopac` sections, paths may be relative to `pipeline/`), and `credentials/` for the Fubon `.p12` and the service account. `fubon_neo` is not on PyPI — install from `vendor/*.whl`.
+
+**Scheduling (launchd):** `com.portfolio.prices` runs `fetch_prices.py --market-hours-only` every 180s; `com.portfolio.sync` runs `scripts/sync_all.sh` daily at 14:00. Logs in `pipeline/log/` and `log/sync_<date>.log`.
+
+**Gotchas:** Fubon API keys are IP-bound and expire — login failure is non-fatal (quotes drop to MIS) but shows up in `pipeline/log/fetch_prices.err.log`. shioaji ≥1.7 removed `contracts_timeout` from `login()`.
+
+See `pipeline/README.md` for commands and setup detail.
 
 ## Code Style
 
