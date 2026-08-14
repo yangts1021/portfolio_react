@@ -16,11 +16,11 @@
  *                           XLOOKUP("匯率_USDTWD", admin_Dashboard!A:A, admin_Dashboard!B:B))
  *
  * @param {range} txRange       股票交易紀錄 A:G（日期,券商,代碼,動作,股數,單價,幣別）
- * @param {range} priceBetaRange 即時價格與beta A:C（代碼,價格,beta）
+ * @param {range} priceBetaRange 即時價格與beta A:C（代碼,價格,beta；beta 欄僅供相容，輸出不含）
  * @param {range} quoteRange    即時報價 A:C（代號,名稱,價格）；沒有這張表就傳空字串
  * @param {range} splitRange    分割事件 A:C（標的,生效日,比例）；沒有就傳空字串
  * @param {number} usdtwd       美元兌台幣匯率
- * @return 持倉表（含標題列）
+ * @return 持倉表 A~I 九欄（含標題列）。J/K/L 由工作表自己的公式計算，勿一併輸出
  * @customfunction
  */
 function CALCULATE_PORTFOLIO_V2(txRange, priceBetaRange, quoteRange, splitRange, usdtwd) {
@@ -122,9 +122,11 @@ function CALCULATE_PORTFOLIO_V2(txRange, priceBetaRange, quoteRange, splitRange,
     totalTwd += pos.qty * price * fx;
   });
 
+  // 只輸出 A~I 九欄：J/K/L（投入成本、倉位市值TWD、beta）是「持倉現況」裡
+  // 每列各自的實體公式，多輸出會讓陣列展不開變成 #REF!
   var out = [[
     '代碼', '庫存', '即時價格', '幣別', '倉位市值 (原幣)', '平均成本 (原幣)',
-    '未實現損益 (TWD)', '報酬率 %', '占比 (TWD)', '投入成本 (TWD)', '倉位市值 (TWD)', 'beta',
+    '未實現損益 (TWD)', '報酬率 %', '占比 (TWD)',
   ]];
 
   held.forEach(function (symbol) {
@@ -132,7 +134,6 @@ function CALCULATE_PORTFOLIO_V2(txRange, priceBetaRange, quoteRange, splitRange,
     var price = prices[symbol] || pos.avg;
     var fx = pos.currency === 'USD' ? rate : 1;
     var marketValue = pos.qty * price;
-    var unrealizedTwd = (marketValue - pos.cost) * fx;
     out.push([
       symbol,
       pos.qty,
@@ -140,12 +141,9 @@ function CALCULATE_PORTFOLIO_V2(txRange, priceBetaRange, quoteRange, splitRange,
       pos.currency,
       marketValue,
       pos.avg,
-      unrealizedTwd,
+      (marketValue - pos.cost) * fx,
       pos.cost > 0 ? (marketValue - pos.cost) / pos.cost : 0,
       totalTwd > 0 ? (marketValue * fx) / totalTwd : 0,
-      pos.cost * fx,
-      marketValue * fx,
-      betas[symbol] === undefined ? 1 : betas[symbol],
     ]);
   });
 
