@@ -22,7 +22,7 @@ import sys
 from datetime import date, datetime, timedelta
 
 import pricedb
-from common import load_config, open_spreadsheet
+from common import load_config, open_sheet, profiles
 from fetch_prices import TX_SHEET, looks_tw
 
 FX_TICKER = 'TWD=X'  # USD/TWD
@@ -102,6 +102,7 @@ def main() -> int:
     parser.add_argument('--symbols', help='指定標的（逗號分隔），跳過從 Sheet 取清單')
     parser.add_argument('--skip-fx', action='store_true', help='不回補匯率')
     parser.add_argument('--dry-run', action='store_true', help='只印結果，不寫 DB')
+    parser.add_argument('--profile', help='只取指定帳本的標的，預設全部')
     args = parser.parse_args()
 
     conn = pricedb.connect()
@@ -111,9 +112,15 @@ def main() -> int:
                 for s in args.symbols.split(',') if s.strip()}
         start = args.start or (date.today() - timedelta(days=365 * 3)).isoformat()
     else:
-        sh = open_spreadsheet(load_config())
-        held = all_traded_symbols(sh)
-        start = args.start or first_trade_date(sh)
+        # 日線與匯率是共用的，多帳本取標的聯集、起點取最早的一筆交易
+        held = {}
+        starts = []
+        for profile in profiles(load_config(), args.profile):
+            sh = open_sheet(profile)
+            held.update(all_traded_symbols(sh))
+            starts.append(first_trade_date(sh))
+        start = args.start or (min(starts) if starts else
+                               (date.today() - timedelta(days=365)).isoformat())
 
     # yfinance 的 end 是開區間，多加一天才會含今天
     end = args.end or (date.today() + timedelta(days=1)).isoformat()

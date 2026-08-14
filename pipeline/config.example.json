@@ -1,8 +1,16 @@
 {
-  "google_sheet": {
-    "spreadsheet_id": "試算表 ID",
-    "credentials_path": "credentials/service-account.json"
-  },
+  "profiles": [
+    {
+      "name": "rick",
+      "spreadsheet_id": "試算表 ID",
+      "credentials_path": "credentials/service-account.json"
+    },
+    {
+      "name": "另一本",
+      "spreadsheet_id": "另一張試算表 ID",
+      "credentials_path": "credentials/service-account.json"
+    }
+  ],
   "fubon": {
     "id": "身分證字號",
     "api_key": "富邦 API Key",

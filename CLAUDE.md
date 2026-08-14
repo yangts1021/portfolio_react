@@ -65,7 +65,9 @@ Quote rows carry `來源` and `報價時間` so the UI can show freshness instea
 
 **Read path:** GAS `?type=twPrices` tries 「即時報價」 first (`twSource: "live"`), falls back to proxying TWSE MIS (`"mis"`), then to GOOGLEFINANCE values in 「即時價格與beta」 (`"sheet"`). MIS is unreliable from Google datacenter IPs — that intermittent block is why the local fetcher exists.
 
-**Environment:** all three scripts share one `pipeline/venv` (Python 3.14), one `config.json` (`google_sheet` / `fubon` / `sinopac` sections, paths may be relative to `pipeline/`), and `credentials/` for the Fubon `.p12` and the service account. `fubon_neo` is not on PyPI — install from `vendor/*.whl`.
+**Multi-book:** `config.json` holds a `profiles` list, one entry per Google Sheet (legacy single `google_sheet` still works as a `default` profile). Quotes and daily closes are keyed by symbol/date and therefore shared across books: holdings are unioned, fetched once, then written back to each book's own 「即時報價」/「淨值歷史」. `--profile <name>` limits a run to one book. Broker syncs only make sense for the first profile since they use the configured API keys.
+
+**Environment:** all scripts share one `pipeline/venv` (Python 3.14), one `config.json` (`profiles` / `fubon` / `sinopac` sections, paths may be relative to `pipeline/`), and `credentials/` for the Fubon `.p12` and the service account. `fubon_neo` is not on PyPI — install from `vendor/*.whl`.
 
 **Scheduling (launchd):** `com.portfolio.prices` runs `fetch_prices.py --market-hours-only` every 180s; `com.portfolio.sync` runs `scripts/sync_all.sh` daily at 14:00. Logs in `pipeline/log/` and `log/sync_<date>.log`.
 

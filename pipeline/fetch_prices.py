@@ -33,7 +33,7 @@ from pathlib import Path
 import requests
 
 import pricedb
-from common import TPE, get_or_create_worksheet, load_config, open_spreadsheet, resolve_path
+from common import TPE, get_or_create_worksheet, load_config, open_sheet, profiles, resolve_path
 
 BASE = Path(__file__).resolve().parent
 
@@ -471,22 +471,32 @@ def main() -> int:
                              '4~6 碼數字視為台股，其餘視為美股')
     parser.add_argument('--market-hours-only', action='store_true',
                         help='台股與美股都收盤時直接結束（給排程用）')
+    parser.add_argument('--profile', help='只跑指定帳本，預設全部')
     args = parser.parse_args()
 
     if args.market_hours_only and not (tw_market_open() or us_market_open()):
         return 0
 
     config = load_config()
-    sh = None
+    # 每個帳本的持倉各自算，抓價取聯集 —— 報價與代號綁定、與持有人無關，
+    # 兩本重疊的標的只會抓一次
+    books: list[tuple[dict, object, dict[str, str]]] = []
+    held: dict[str, str] = {}
 
     if args.symbols:
         syms = [s.strip().upper() for s in args.symbols.split(',') if s.strip()]
         held = {s: ('TWD' if looks_tw(s) else 'USD') for s in syms}
     else:
-        sh = open_spreadsheet(config)
-        held = resolve_holdings(sh)
+        for profile in profiles(config, args.profile):
+            sheet = open_sheet(profile)
+            holdings = resolve_holdings(sheet)
+            if not holdings:
+                print(f'[{profile["name"]}] 沒有需要報價的標的', file=sys.stderr)
+                continue
+            books.append((profile, sheet, holdings))
+            held.update(holdings)
         if not held:
-            print('Sheet 裡沒有需要報價的標的', file=sys.stderr)
+            print('所有帳本都沒有需要報價的標的', file=sys.stderr)
             return 1
 
     tw_symbols, us_symbols = split_by_market(held)
@@ -526,15 +536,20 @@ def main() -> int:
     save_quotes(conn, list(quotes.values()))
     conn.close()
 
-    pushed = 0
+    # 各帳本只寫回自己持有的那幾檔
+    written = []
     if not args.no_sheet:
-        if sh is None:
-            sh = open_spreadsheet(config)
-        pushed = push_to_sheet(sh, quotes)
+        if not books:
+            books = [(p, open_sheet(p), held) for p in profiles(config, args.profile)]
+        for profile, sheet, holdings in books:
+            subset = {s: q for s, q in quotes.items() if s in holdings}
+            push_to_sheet(sheet, subset)
+            written.append(f'{profile["name"]} {len(subset)} 檔')
 
     stale = sum(1 for q in quotes.values() if q.stale)
+    summary = '　'.join(written) if written else '未寫入'
     print(f'{datetime.now(TPE).isoformat(timespec="seconds")}  '
-          f'報價 {len(quotes)} 檔（快取 {stale} 檔）  Sheet 寫入 {pushed} 檔')
+          f'報價 {len(quotes)} 檔（快取 {stale} 檔）  Sheet：{summary}')
     return 0
 
 

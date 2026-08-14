@@ -56,17 +56,52 @@ R(D) = D 之後所有分割比例的乘積。換算後直接乘上調整後收�
 
 ## 設定
 
-`config.json`（不進版控，格式見 `config.example.json`）一份搞定三支腳本：
+`config.json`（不進版控，格式見 `config.example.json`）一份搞定所有腳本：
 
 ```json
 {
-  "google_sheet": { "spreadsheet_id": "...", "credentials_path": "credentials/service-account.json" },
+  "profiles": [
+    { "name": "rick",  "spreadsheet_id": "...", "credentials_path": "credentials/service-account.json" },
+    { "name": "另一本", "spreadsheet_id": "...", "credentials_path": "credentials/service-account.json" }
+  ],
   "fubon": { "id": "...", "api_key": "...", "cert_path": "credentials/憑證.p12", "cert_password": "..." },
   "sinopac": { "api_key": "...", "secret_key": "..." }
 }
 ```
 
 路徑可寫相對於 `pipeline/` 的位置。憑證放 `credentials/`，`.gitignore` 已排除。
+舊版單一 `google_sheet` 的寫法仍然可用，會被當成一本名為 `default` 的帳本。
+
+## 多帳本
+
+`profiles` 每一筆就是一份 Google Sheet。報價與日線是共用的 —— `quote_latest`、
+`daily_close`、`daily_fx` 都以「代號 + 日期」為鍵，跟持有人無關，所以：
+
+```
+各帳本持倉 → 取聯集 → 抓一次價 → 分別寫回各自的「即時報價」
+                              ↘ 共用 daily_close → 各自重算自己的「淨值歷史」
+```
+
+兩本重疊的標的（例如都持有 2330）只會抓一次，多一本帳本幾乎不增加抓價成本。
+
+```bash
+./venv/bin/python fetch_prices.py                    # 全部帳本
+./venv/bin/python fetch_prices.py --profile rick     # 只跑一本
+./venv/bin/python build_history.py --profile 另一本
+```
+
+**券商同步只對主帳本（`profiles` 第一本）有意義**，因為用的是 config 裡那組 API Key。
+其他帳本請手動輸入交易紀錄，不要把別人的券商憑證放進來。
+
+新增一本的步驟：
+
+1. 複製一份試算表，保留 `股票交易紀錄`、`分割事件`、`質押借貸資料` 的欄位格式
+   （`即時報價` 與 `淨值歷史` 會自動建立）
+2. 把 service account 的信箱加為該試算表的**編輯者**
+3. 該試算表綁一份 Apps Script（貼同一份 `gas/Code.gs`）並部署，取得專屬的 `/exec` 網址
+4. `config.json` 的 `profiles` 加一筆
+5. 跑 `backfill_history.py` 補歷史日線，再跑 `build_history.py`
+6. 網頁的資料同步視窗貼上那組 GAS 網址即可切換帳本
 
 ## 環境
 

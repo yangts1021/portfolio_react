@@ -26,7 +26,7 @@ import sys
 from datetime import datetime
 
 import pricedb
-from common import get_or_create_worksheet, load_config, open_spreadsheet
+from common import get_or_create_worksheet, load_config, open_sheet, profiles
 
 TX_SHEET = '股票交易紀錄'
 SPLIT_SHEET = '分割事件'
@@ -220,38 +220,45 @@ def push_to_sheet(sh, rows: list[list]) -> None:
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument('--dry-run', action='store_true', help='只印結果，不寫 Sheet')
-    parser.add_argument('--csv', help='另存一份 CSV')
+    parser.add_argument('--csv', help='另存一份 CSV（多帳本時檔名會加上帳本名）')
     parser.add_argument('--tail', type=int, default=8, help='印出最後幾列')
+    parser.add_argument('--profile', help='只跑指定帳本，預設全部')
     args = parser.parse_args()
 
-    sh = open_spreadsheet(load_config())
-    txs = read_transactions(sh)
-    splits = read_splits(sh)
+    config = load_config()
+    books = profiles(config, args.profile)
     conn = pricedb.connect()
-    rows = build(conn, txs, splits)
+    failed = 0
+
+    for profile in books:
+        name = profile['name']
+        sh = open_sheet(profile)
+        rows = build(conn, read_transactions(sh), read_splits(sh))
+        if not rows:
+            print(f'[{name}] 沒有可用的歷史資料，請先跑 backfill_history.py', file=sys.stderr)
+            failed += 1
+            continue
+
+        print(f'\n[{name}] {rows[0][0]} ~ {rows[-1][0]}，共 {len(rows)} 個交易日')
+        print(f'{"日期":<12}{"總市值":>14}{"總成本":>14}{"未實現":>14}{"已實現累計":>14}{"報酬率":>9}')
+        for row in rows[-args.tail:]:
+            print(f'{row[0]:<12}{row[1]:>14,.0f}{row[2]:>14,.0f}{row[3]:>14,.0f}{row[4]:>14,.0f}'
+                  f'{row[5]:>8.2f}%')
+
+        if args.csv:
+            path = args.csv if len(books) == 1 else f'{args.csv.rsplit(".", 1)[0]}_{name}.csv'
+            with open(path, 'w', newline='', encoding='utf-8') as f:
+                writer = csv.writer(f)
+                writer.writerow(HISTORY_HEADER)
+                writer.writerows(rows)
+            print(f'CSV 已寫入 {path}')
+
+        if not args.dry_run:
+            push_to_sheet(sh, rows)
+            print(f'[{name}] Sheet「{HISTORY_SHEET}」已更新 {len(rows)} 列')
+
     conn.close()
-
-    if not rows:
-        print('沒有可用的歷史資料，請先跑 backfill_history.py', file=sys.stderr)
-        return 1
-
-    print(f'{rows[0][0]} ~ {rows[-1][0]}，共 {len(rows)} 個交易日')
-    print(f'{"日期":<12}{"總市值":>14}{"總成本":>14}{"未實現":>14}{"已實現累計":>14}{"報酬率":>9}')
-    for row in rows[-args.tail:]:
-        print(f'{row[0]:<12}{row[1]:>14,.0f}{row[2]:>14,.0f}{row[3]:>14,.0f}{row[4]:>14,.0f}'
-              f'{row[5]:>8.2f}%')
-
-    if args.csv:
-        with open(args.csv, 'w', newline='', encoding='utf-8') as f:
-            writer = csv.writer(f)
-            writer.writerow(HISTORY_HEADER)
-            writer.writerows(rows)
-        print(f'CSV 已寫入 {args.csv}')
-
-    if not args.dry_run:
-        push_to_sheet(sh, rows)
-        print(f'Sheet「{HISTORY_SHEET}」已更新 {len(rows)} 列')
-    return 0
+    return 1 if failed == len(books) else 0
 
 
 if __name__ == '__main__':

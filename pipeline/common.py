@@ -35,14 +35,48 @@ def resolve_path(path):
     return p if p.is_absolute() else BASE / p
 
 
-def open_spreadsheet(config):
-    """建立 Google Sheet 連線，回傳 spreadsheet 物件"""
+def profiles(config, only=None):
+    """回傳帳本清單 [{name, spreadsheet_id, credentials_path}]。
+
+    設定可以是多帳本的 `profiles` 清單，或舊版單一 `google_sheet`；
+    兩者都有時以 `profiles` 為準。only 可指定只取某一本。
+    """
+    raw = config.get('profiles')
+    if not raw:
+        sheet = config.get('google_sheet')
+        if not sheet:
+            print('錯誤：config.json 缺少 profiles 或 google_sheet', file=sys.stderr)
+            sys.exit(1)
+        raw = [sheet]
+
+    result = []
+    for item in raw:
+        profile = dict(item)
+        profile.setdefault('name', 'default')
+        result.append(profile)
+
+    if only:
+        result = [p for p in result if p['name'] == only]
+        if not result:
+            names = ', '.join(p.get('name', '?') for p in raw)
+            print(f'錯誤：找不到帳本「{only}」，可用的有：{names}', file=sys.stderr)
+            sys.exit(1)
+    return result
+
+
+def open_sheet(profile):
+    """依帳本設定建立 Google Sheet 連線，回傳 spreadsheet 物件"""
     creds = Credentials.from_service_account_file(
-        str(resolve_path(config['google_sheet']['credentials_path'])),
+        str(resolve_path(profile['credentials_path'])),
         scopes=SCOPES,
     )
     gc = gspread.authorize(creds)
-    return gc.open_by_key(config['google_sheet']['spreadsheet_id'])
+    return gc.open_by_key(profile['spreadsheet_id'])
+
+
+def open_spreadsheet(config):
+    """開啟主帳本（profiles 的第一本）。券商同步只對主帳本有意義"""
+    return open_sheet(profiles(config)[0])
 
 
 def get_or_create_worksheet(sh, title, header=None):
