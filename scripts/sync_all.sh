@@ -29,4 +29,10 @@ echo "[報價] 開始..." >> "$LOG"
 "$PY" fetch_prices.py >> "$LOG" 2>&1
 echo "[報價] 完成" >> "$LOG"
 
+# 補近一個月的日線（Mac 關機那幾天會缺），再重算淨值曲線
+echo "[歷史] 開始..." >> "$LOG"
+"$PY" backfill_history.py --start "$(date -v-30d +%Y-%m-%d)" >> "$LOG" 2>&1
+"$PY" build_history.py >> "$LOG" 2>&1
+echo "[歷史] 完成" >> "$LOG"
+
 echo "=== $(date) 同步結束 ===" >> "$LOG"

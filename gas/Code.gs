@@ -131,7 +131,35 @@ function doGet(e) {
       }
     }
 
-    // 9. 即時價格：優先讀本機 pipeline 寫入的「即時報價」，其次 MIS，最後 GOOGLEFINANCE
+    // 9. 淨值歷史（本機 pipeline/build_history.py 由每日收盤重算後寫入）
+    //    資料量大，只在明確指定 type=history 時回傳，不進預設同步
+    if (type === 'history') {
+      var sheet = ss.getSheetByName('淨值歷史');
+      var list = [];
+      if (sheet) {
+        var data = sheet.getDataRange().getValues();
+        for (var i = 1; i < data.length; i++) {
+          var row = data[i];
+          if (!row[0]) continue;
+          // 日期可能被 Sheets 解析成 Date，統一輸出台北時區的 YYYY-MM-DD
+          var day =
+            row[0] instanceof Date
+              ? Utilities.formatDate(row[0], 'Asia/Taipei', 'yyyy-MM-dd')
+              : String(row[0]).slice(0, 10);
+          list.push({
+            date: day,
+            marketValue: Number(row[1]) || 0,
+            cost: Number(row[2]) || 0,
+            unrealized: Number(row[3]) || 0,
+            realized: Number(row[4]) || 0,
+            roi: Number(row[5]) || 0,
+          });
+        }
+      }
+      result.history = list;
+    }
+
+    // 10. 即時價格：優先讀本機 pipeline 寫入的「即時報價」，其次 MIS，最後 GOOGLEFINANCE
     if (type === 'twPrices') {
       var symbolsCsv = String(e.parameter.symbols || '');
       var live = readLivePricesFromSheet(ss, symbolsCsv);

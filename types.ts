@@ -23,6 +23,16 @@ export interface SplitEvent {
   ratio: number; // 1 股拆成幾股；反向合併用小數（如 4 併 1 = 0.25）
 }
 
+// 淨值歷史的一天，由 pipeline/build_history.py 依每日收盤重算
+export interface HistoryPoint {
+  date: string; // YYYY-MM-DD
+  marketValue: number; // 總市值 TWD
+  cost: number; // 總成本 TWD
+  unrealized: number; // 未實現損益 TWD
+  realized: number; // 已實現損益累計 TWD
+  roi: number; // 報酬率 %
+}
+
 export interface BankAccount {
   bank: string;
   usd: number;

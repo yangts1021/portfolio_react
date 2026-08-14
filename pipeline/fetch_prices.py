@@ -32,10 +32,10 @@ from pathlib import Path
 
 import requests
 
+import pricedb
 from common import TPE, get_or_create_worksheet, load_config, open_spreadsheet, resolve_path
 
 BASE = Path(__file__).resolve().parent
-DB_PATH = BASE / 'prices.db'
 
 MIS_URL = 'https://mis.twse.com.tw/stock/api/getStockInfo.jsp'
 MIS_INDEX = 'https://mis.twse.com.tw/stock/index.jsp'
@@ -101,39 +101,6 @@ def us_market_open() -> bool:
 # storage
 # --------------------------------------------------------------------------- #
 
-def init_db(conn: sqlite3.Connection) -> None:
-    conn.executescript(
-        """
-        CREATE TABLE IF NOT EXISTS quote_latest (
-            symbol      TEXT PRIMARY KEY,
-            market      TEXT NOT NULL,
-            name        TEXT,
-            price       REAL NOT NULL,
-            prev_close  REAL,
-            source      TEXT NOT NULL,
-            quote_ts    TEXT NOT NULL,
-            fetched_at  TEXT NOT NULL
-        );
-
-        CREATE TABLE IF NOT EXISTS quote_history (
-            symbol      TEXT NOT NULL,
-            price       REAL NOT NULL,
-            prev_close  REAL,
-            source      TEXT NOT NULL,
-            quote_ts    TEXT NOT NULL,
-            PRIMARY KEY (symbol, quote_ts)
-        );
-
-        -- 記住台股代號屬上市(tse)或上櫃(otc)，之後只查正確的那一邊
-        CREATE TABLE IF NOT EXISTS tw_symbol_market (
-            symbol  TEXT PRIMARY KEY,
-            ex      TEXT NOT NULL
-        );
-        """
-    )
-    conn.commit()
-
-
 def save_quotes(conn: sqlite3.Connection, quotes: list[Quote]) -> None:
     now = datetime.now(TPE).isoformat(timespec='seconds')
     fresh = [q for q in quotes if not q.stale]
@@ -155,6 +122,11 @@ def save_quotes(conn: sqlite3.Connection, quotes: list[Quote]) -> None:
         [(q.symbol, q.price, q.prev_close, q.source, q.quote_ts) for q in fresh],
     )
     conn.commit()
+
+    # 順手記當日收盤：盤中每輪覆寫，收盤後最後一輪留下來的就是收盤價
+    pricedb.upsert_daily_close(
+        conn, [(q.symbol, q.quote_ts[:10], q.price, q.source) for q in fresh]
+    )
 
 
 def load_cached(conn: sqlite3.Connection, symbol: str) -> Quote | None:
@@ -519,8 +491,7 @@ def main() -> int:
 
     tw_symbols, us_symbols = split_by_market(held)
 
-    conn = sqlite3.connect(DB_PATH)
-    init_db(conn)
+    conn = pricedb.connect()
 
     quotes: dict[str, Quote] = {}
 

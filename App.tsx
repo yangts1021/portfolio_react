@@ -9,6 +9,7 @@ import {
   BitfinexAsset,
   RateMode,
   ExchangeRates,
+  HistoryPoint,
 } from './types';
 import { STORAGE_KEYS } from './constants';
 import { fetchPrices, isMarketHours, PRICE_SOURCE_LABEL, PriceQuoteMeta } from './utils/marketData';
@@ -81,6 +82,12 @@ const App: React.FC = () => {
     return saved ? JSON.parse(saved) : {};
   });
 
+  // 淨值歷史，由 pipeline 依每日收盤重算後寫入 Sheet
+  const [history, setHistory] = useState<HistoryPoint[]>(() => {
+    const saved = localStorage.getItem(STORAGE_KEYS.HISTORY);
+    return saved ? JSON.parse(saved) : [];
+  });
+
   const [symbolBetas, setSymbolBetas] = useState<Record<string, number>>(() => {
     const saved = localStorage.getItem(STORAGE_KEYS.BETAS);
     return saved ? JSON.parse(saved) : {};
@@ -143,6 +150,9 @@ const App: React.FC = () => {
     localStorage.setItem(STORAGE_KEYS.PRICE_META, JSON.stringify(priceMeta));
   }, [priceMeta]);
   useEffect(() => {
+    localStorage.setItem(STORAGE_KEYS.HISTORY, JSON.stringify(history));
+  }, [history]);
+  useEffect(() => {
     localStorage.setItem(STORAGE_KEYS.BETAS, JSON.stringify(symbolBetas));
   }, [symbolBetas]);
   useEffect(() => {
@@ -195,6 +205,19 @@ const App: React.FC = () => {
     },
     [priceSymbols, gasUrl, showToast],
   );
+
+  // 淨值歷史另外抓，資料量大不放進預設同步
+  const fetchHistory = useCallback(async () => {
+    if (!gasUrl) return;
+    try {
+      const res = await fetch(`${gasUrl}?type=history`);
+      if (!res.ok) return;
+      const json = await res.json();
+      if (Array.isArray(json.history)) setHistory(json.history);
+    } catch {
+      // 歷史抓不到不影響主畫面，維持上次快取
+    }
+  }, [gasUrl]);
 
   const fetchDataFromGAS = useCallback(
     async (isSilent = false) => {
@@ -315,11 +338,12 @@ const App: React.FC = () => {
 
         // Sheet 的 GOOGLEFINANCE 價格可能是舊的，同步完再抓一次即時報價覆寫
         refreshPrices(isSilent);
+        fetchHistory();
       } catch (error: any) {
         if (!isSilent) setAlertConfig({ title: '同步失敗', message: error.message });
       }
     },
-    [gasUrl, showToast, refreshPrices],
+    [gasUrl, showToast, refreshPrices, fetchHistory],
   );
 
   const fetchExchangeRate = useCallback(async () => {
@@ -339,7 +363,10 @@ const App: React.FC = () => {
   useEffect(() => {
     if (rateMode === 'auto') fetchExchangeRate();
     if (gasUrl && rateMode === 'auto') fetchDataFromGAS(true);
-    else refreshPrices(true);
+    else {
+      refreshPrices(true);
+      fetchHistory();
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -378,6 +405,7 @@ const App: React.FC = () => {
         setTransactions([]);
         setCurrentPrices({});
         setPriceMeta({});
+        setHistory([]);
         setSymbolBetas({});
         setBankData([]);
         setPledgeData([]);
@@ -420,6 +448,7 @@ const App: React.FC = () => {
               transactions={transactions}
               currentPrices={currentPrices}
               priceMeta={priceMeta}
+              history={history}
               symbolBetas={symbolBetas}
               exchangeRates={exchangeRates}
               bankData={bankData}

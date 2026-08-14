@@ -47,7 +47,10 @@ Local Python scripts that feed the Google Sheet. **The web app never talks to br
 | `sync_fubon.py` | Fubon positions, last-30-day fills, unrealized P&L snapshot | 「富邦庫存」「富邦交易紀錄」「富邦持倉快照」 |
 | `sync_sinopac.py` | Sinopac positions, trade details, settlement balance | 「永豐庫存」「永豐交易紀錄」「銀行系統餘額」 |
 | `fetch_prices.py` | Holding quotes, replaces `GOOGLEFINANCE()` | 「即時報價」 + `prices.db` |
+| `backfill_history.py` | Backfills daily closes and FX via yfinance | `prices.db` |
+| `build_history.py` | Recomputes the asset/P&L curve from daily closes | 「淨值歷史」 |
 | `common.py` | Shared config loading, Sheet auth, worksheet access | — |
+| `pricedb.py` | `prices.db` schema and connection | — |
 
 **Price fallback chain** — every symbol always resolves to a number:
 
@@ -57,6 +60,8 @@ US  yfinance            → prices.db last-known price
 ```
 
 Quote rows carry `來源` and `報價時間` so the UI can show freshness instead of rendering a stale value silently. The symbol list is **not** hardcoded: `resolve_holdings()` derives it from the 「股票交易紀錄」 sheet (net qty > 0) plus 「質押借貸資料」, so a new transaction is picked up on the next run. Sold-out symbols stop updating but their rows stay as last-known price. HKD/JPY holdings are skipped (yfinance needs exchange suffixes) and keep their 「即時價格與beta」 price.
+
+**History curve:** the curve itself is never stored — only `daily_close` and `daily_fx` are, and `build_history.py` recomputes every day's value from the transaction log, so backfilling an old trade or adding a split event fixes history instead of leaving it wrong forever. **Unit gotcha:** Yahoo's historical closes are retroactively split-adjusted, so `build_history.py` converts every quantity into *current* share units (a share held on date D equals R(D) current shares, where R(D) is the product of ratios of splits after D) before multiplying by the close. Read `pipeline/README.md` before touching that math.
 
 **Read path:** GAS `?type=twPrices` tries 「即時報價」 first (`twSource: "live"`), falls back to proxying TWSE MIS (`"mis"`), then to GOOGLEFINANCE values in 「即時價格與beta」 (`"sheet"`). MIS is unreliable from Google datacenter IPs — that intermittent block is why the local fetcher exists.
 

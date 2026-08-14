@@ -8,7 +8,10 @@
 | `sync_fubon.py` | 富邦庫存、近 30 天成交、未實現損益快照 | 「富邦庫存」「富邦交易紀錄」「富邦持倉快照」 |
 | `sync_sinopac.py` | 永豐庫存、交易明細、交割帳戶餘額 | 「永豐庫存」「永豐交易紀錄」「銀行系統餘額」 |
 | `fetch_prices.py` | 持倉報價（取代 GOOGLEFINANCE） | 「即時報價」＋ `prices.db` |
-| `common.py` | 三支共用的設定載入與 Sheet 連線 | — |
+| `backfill_history.py` | 用 yfinance 回補每日收盤與匯率 | `prices.db` |
+| `build_history.py` | 由每日收盤重算資產／損益曲線 | 「淨值歷史」 |
+| `common.py` | 共用的設定載入與 Sheet 連線 | — |
+| `pricedb.py` | `prices.db` 的結構與連線 | — |
 
 ## 報價的 fallback chain
 
@@ -25,6 +28,31 @@
 不會像 GOOGLEFINANCE 失效時直接噴 `#N/A` 把整張表算爆。
 
 HKD / JPY 標的目前跳過（yfinance 需要交易所後綴），維持原本「即時價格與beta」的價格。
+
+## 淨值歷史
+
+曲線本身不存，只存每日收盤，每次都從交易紀錄重算 —— 補登舊交易或新增分割事件後重跑一次就自動修正。
+
+```
+daily_close (symbol, date, close)   每檔每日收盤
+daily_fx    (date, usdtwd)          每日匯率，美股部位要用當日匯率換算
+```
+
+**單位問題（改動這塊前務必先讀）**：Yahoo 的歷史收盤會回溯調整分割。例如 00685L 在 2026-07-07
+一拆 24，之前的收盤都已除以 24（實測：6/29 成交價 289.05，Yahoo 同日收盤 12.01，正好差 24 倍）。
+所以 `build_history.py` 一律把股數換算成「現行單位」：某日的 1 股 = R(該日) 股現行單位，
+R(D) = D 之後所有分割比例的乘積。換算後直接乘上調整後收盤，曲線在分割前後是連續的。
+金額不需要調整（成本就是成本），均價則是 總成本 ÷ 現行單位股數。
+
+`fetch_prices.py` 每輪會順手覆寫當日 `daily_close`，所以收盤後最後一輪留下的就是收盤價，
+平常不必再跑 yfinance；`backfill_history.py` 用於首次建立歷史，或補 Mac 關機那幾天的缺口。
+
+```bash
+./venv/bin/python backfill_history.py                     # 從最早一筆交易補到今天
+./venv/bin/python backfill_history.py --start 2026-07-15  # 只補近期缺口
+./venv/bin/python build_history.py --dry-run              # 只印最後幾列，不寫 Sheet
+./venv/bin/python build_history.py --csv history.csv
+```
 
 ## 設定
 

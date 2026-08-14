@@ -13,6 +13,7 @@ export const STORAGE_KEYS = {
   TRANSACTIONS: 'my_transactions',
   PRICES: 'my_current_prices',
   PRICE_META: 'my_price_meta',
+  HISTORY: 'my_history',
   BETAS: 'my_symbol_betas',
   BANK: 'my_bank_data',
   PLEDGE: 'my_pledge_data',

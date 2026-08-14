@@ -8,7 +8,9 @@ import {
   RateMode,
   ExchangeRates,
   PortfolioItem,
+  HistoryPoint,
 } from '../../types';
+import HistoryChart from '../UI/HistoryChart';
 import { CATEGORY_COLORS } from '../../constants';
 import {
   calculatePortfolio,
@@ -22,6 +24,7 @@ interface OverviewTabProps {
   transactions: Transaction[];
   currentPrices: Record<string, number>;
   priceMeta: Record<string, PriceQuoteMeta>;
+  history: HistoryPoint[];
   symbolBetas: Record<string, number>;
   exchangeRates: ExchangeRates;
   bankData: BankAccount[];
@@ -519,6 +522,12 @@ const OverviewTab: React.FC<OverviewTabProps> = (props) => {
           </div>
         </div>
       </div>
+
+      <HistoryChart
+        history={props.history}
+        isDarkMode={props.isDarkMode}
+        hideAmounts={props.hideAmounts}
+      />
 
       <div className='bg-white dark:bg-gray-900 rounded-xl shadow-sm border border-gray-100 dark:border-gray-800 overflow-hidden transition-colors'>
         <div className='p-4 border-b border-gray-100 dark:border-gray-800 bg-gray-50 dark:bg-gray-800/50 flex justify-between items-center'>
