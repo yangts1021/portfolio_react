@@ -46,9 +46,13 @@ const HistoryChart: React.FC<HistoryChartProps> = ({ history, isDarkMode, hideAm
   const [range, setRange] = useState<RangeKey>('6M');
 
   const data = useMemo(() => {
-    if (RANGE_DAYS[range] === 0) return history;
-    const cutoff = Date.now() - RANGE_DAYS[range] * 86400000;
-    return history.filter((p) => new Date(p.date).getTime() >= cutoff);
+    const cutoff = RANGE_DAYS[range] === 0 ? 0 : Date.now() - RANGE_DAYS[range] * 86400000;
+    return (
+      history
+        .filter((p) => new Date(p.date).getTime() >= cutoff)
+        // 總損益 = 未實現 + 已實現累計，在圖上額外畫一條
+        .map((p) => ({ ...p, total: p.unrealized + p.realized }))
+    );
   }, [history, range]);
 
   const latest = history[history.length - 1];
@@ -197,12 +201,21 @@ const HistoryChart: React.FC<HistoryChartProps> = ({ history, isDarkMode, hideAm
               />
               <Legend wrapperStyle={{ fontSize: 11 }} />
               <ReferenceLine y={0} stroke={axis} strokeDasharray='3 3' />
+              {/* 總損益是主角，畫粗一點；未實現與已實現退為細線 */}
+              <Line
+                type='monotone'
+                dataKey='total'
+                name='總損益'
+                stroke='#f59e0b'
+                strokeWidth={2.5}
+                dot={false}
+              />
               <Line
                 type='monotone'
                 dataKey='unrealized'
                 name='未實現'
                 stroke='#ef4444'
-                strokeWidth={2}
+                strokeWidth={1.5}
                 dot={false}
               />
               <Line
@@ -210,7 +223,7 @@ const HistoryChart: React.FC<HistoryChartProps> = ({ history, isDarkMode, hideAm
                 dataKey='realized'
                 name='已實現累計'
                 stroke='#22c55e'
-                strokeWidth={2}
+                strokeWidth={1.5}
                 dot={false}
               />
             </LineChart>
