@@ -55,11 +55,15 @@ const HistoryChart: React.FC<HistoryChartProps> = ({ history, isDarkMode, hideAm
     );
   }, [history, range]);
 
+  // 區間績效看的是總損益的變化，避免把期間內的加碼算成獲利。
+  // 「全部」的基準是 0（開始投資前沒有損益）而不是首日 —— 首日已經帶著
+  // 建帳前累積的損益（既有部位是用原始均價登錄的），拿它當基準會少算那一段，
+  // 導致數字對不上總覽的「總淨損益」。
   const latest = history[history.length - 1];
   const first = data[0];
-  // 區間績效看的是「市值減成本」的變化，避免把期間內的加碼算成獲利
-  const periodGain =
-    latest && first ? latest.unrealized + latest.realized - (first.unrealized + first.realized) : 0;
+  const isAll = range === 'ALL';
+  const baseline = isAll || !first ? 0 : first.unrealized + first.realized;
+  const periodGain = latest ? latest.unrealized + latest.realized - baseline : 0;
 
   const axis = isDarkMode ? '#6b7280' : '#9ca3af';
   const grid = isDarkMode ? '#1f2937' : '#f3f4f6';
@@ -86,7 +90,7 @@ const HistoryChart: React.FC<HistoryChartProps> = ({ history, isDarkMode, hideAm
           <div className='text-[11px] text-gray-400 dark:text-gray-500 mt-0.5'>
             {data.length > 0 && `${data[0].date} ~ ${data[data.length - 1].date}`}
             <span className={`ml-2 ${periodGain >= 0 ? 'text-red-500' : 'text-green-500'}`}>
-              區間損益 {periodGain >= 0 ? '+' : ''}
+              {isAll ? '總損益' : '區間損益'} {periodGain >= 0 ? '+' : ''}
               {fmtValue(periodGain)}
             </span>
           </div>
