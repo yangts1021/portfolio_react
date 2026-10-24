@@ -3,20 +3,21 @@
 持倉報價抓取器，取代 Google Sheet 裡的 GOOGLEFINANCE()。
 
 資料流：
-    Sheet「股票交易紀錄」+「質押借貸資料」 -> 算出目前需要報價的標的
+    Supabase transactions + pledges（所有帳本） -> 算出目前需要報價的標的
         -> TW : 富邦 fubon_neo -> TWSE MIS -> prices.db 最後已知價
         -> US : yfinance               -> prices.db 最後已知價
-        -> 寫回 prices.db 與 Sheet「即時報價」
-    網頁再透過 GAS 讀「即時報價」。
+        -> 寫回 prices.db 與 Supabase quotes / daily_close
+    網頁直接讀 Supabase quotes。報價與代號綁定、與持有人無關，所有帳本共用一份。
 
 每筆報價都帶 source 與 quote_ts，降級時網頁看得出新鮮度，
 不會像 GOOGLEFINANCE 失效時直接噴 #N/A 把整張表算爆。
 
 用法：
-    python fetch_prices.py                     # 抓價 -> 寫 DB + Sheet
+    python fetch_prices.py                     # 抓價 -> 寫 prices.db + Supabase
     python fetch_prices.py --dry-run           # 只印結果，什麼都不寫
-    python fetch_prices.py --no-sheet          # 只寫 prices.db，不碰 Sheet
-    python fetch_prices.py --symbols 2330,QQQ  # 指定標的，跳過 Sheet 的持倉計算
+    python fetch_prices.py --no-remote         # 只寫 prices.db，不碰 Supabase
+    python fetch_prices.py --symbols 2330,QQQ  # 指定標的，跳過從交易紀錄計算持倉
+    python fetch_prices.py --profile rick      # 只取指定帳本的持倉
     python fetch_prices.py --market-hours-only # 台美股都收盤就直接結束（給排程用）
 """
 
@@ -33,18 +34,20 @@ from pathlib import Path
 import requests
 
 import pricedb
-from common import TPE, get_or_create_worksheet, load_config, open_sheet, profiles, resolve_path
+from common import TPE, load_config, resolve_path
+from supa import (
+    SupabaseError,
+    from_config,
+    list_books,
+    load_pledged_symbols,
+    load_transactions,
+)
 
 BASE = Path(__file__).resolve().parent
 
 MIS_URL = 'https://mis.twse.com.tw/stock/api/getStockInfo.jsp'
 MIS_INDEX = 'https://mis.twse.com.tw/stock/index.jsp'
 MIS_CHUNK = 40  # 單次請求的 ex_ch 數量；查詢字串太長 MIS 會拒絕
-
-TX_SHEET = '股票交易紀錄'
-PLEDGE_SHEET = '質押借貸資料'
-QUOTE_SHEET = '即時報價'
-QUOTE_HEADER = ['代號', '名稱', '價格', '昨收', '幣別', '來源', '報價時間', '更新時間']
 
 # yfinance 用美股代號；其他幣別的標的暫不支援（需要交易所後綴）
 US_CURRENCIES = {'USD'}
@@ -144,15 +147,8 @@ def load_cached(conn: sqlite3.Connection, symbol: str) -> Quote | None:
 
 
 # --------------------------------------------------------------------------- #
-# 持倉：直接從 Sheet 算，不另外維護持倉檔
+# 持倉：直接從 Supabase 交易紀錄算，不另外維護持倉檔
 # --------------------------------------------------------------------------- #
-
-def _to_float(val) -> float:
-    try:
-        return float(str(val).replace(',', '').strip())
-    except (TypeError, ValueError):
-        return 0.0
-
 
 def looks_tw(symbol: str) -> bool:
     """台股代號：4~6 碼數字，可帶一個字尾字母（00670L、00865B）"""
@@ -161,43 +157,22 @@ def looks_tw(symbol: str) -> bool:
     return body.isdigit() and 4 <= len(body) <= 6
 
 
-def resolve_holdings(sh) -> dict[str, str]:
+def resolve_holdings(txs: list[dict], pledged: set[str]) -> dict[str, str]:
     """回傳 {代號: 幣別}，內容為淨庫存 > 0 的標的加上質押中的標的。
 
-    出清的標的不再更新，但 prices.db 與 Sheet 既有的列會留著當最後已知價。
+    出清的標的不再更新，但 prices.db 與 Supabase quotes 既有的列會留著當最後已知價。
     """
     holdings: dict[str, float] = {}
     currency: dict[str, str] = {}
-
-    rows = sh.worksheet(TX_SHEET).get_all_values()
-    # 欄位：日期(0) 券商(1) 代號(2) 買賣(3) 股數(4) 價格(5) 幣別(6)
-    for row in rows[1:]:
-        if len(row) < 5:
-            continue
-        sym = str(row[2]).strip().upper()
-        if not sym:
-            continue
-        action = str(row[3]).strip().upper()
-        qty = _to_float(row[4])
-        signed = -qty if action in ('賣', 'SELL', 'S') else qty
+    for tx in txs:
+        sym = tx['symbol']
+        signed = -tx['qty'] if tx['action'] == 'SELL' else tx['qty']
         holdings[sym] = holdings.get(sym, 0.0) + signed
-        cur = str(row[6]).strip().upper() if len(row) > 6 else ''
-        if cur:
-            currency[sym] = cur
+        currency[sym] = tx['currency']
 
     held = {s: currency.get(s, 'TWD') for s, qty in holdings.items() if qty > 1e-6}
-
-    try:
-        pledge_rows = sh.worksheet(PLEDGE_SHEET).get_all_values()
-    except Exception:  # noqa: BLE001  沒有這張表就跳過
-        pledge_rows = []
-    for row in pledge_rows[1:]:
-        if len(row) < 2:
-            continue
-        sym = str(row[1]).strip().upper()
-        if sym:
-            held.setdefault(sym, 'TWD')
-
+    for sym in pledged:
+        held.setdefault(sym, 'TWD')
     return held
 
 
@@ -211,7 +186,7 @@ def split_by_market(held: dict[str, str]) -> tuple[list[str], list[str]]:
         else:
             skipped.append(f'{sym}({cur})')
     if skipped:
-        print(f'[skip] 尚未支援的幣別，維持原本的 Sheet 價格：{", ".join(skipped)}',
+        print(f'[skip] 尚未支援的幣別，不抓價：{", ".join(skipped)}',
               file=sys.stderr)
     return tw, us
 
@@ -421,39 +396,31 @@ def fetch_us(symbols: list[str]) -> dict[str, Quote]:
 
 
 # --------------------------------------------------------------------------- #
-# 寫回 Sheet
+# 寫回 Supabase
 # --------------------------------------------------------------------------- #
 
-def push_to_sheet(sh, quotes: dict[str, Quote]) -> int:
-    """以代號為鍵 upsert 到「即時報價」。既有但這次沒抓到的列保持原樣。"""
-    ws = get_or_create_worksheet(sh, QUOTE_SHEET, QUOTE_HEADER)
-
-    existing = ws.get_all_values()
-    rows = existing[1:] if existing else []
-    index = {str(r[0]).strip().upper(): i for i, r in enumerate(rows) if r and r[0]}
-
+def push_to_supabase(client, quotes: dict[str, Quote]) -> None:
+    """quotes 依代號 upsert（含快取價，source 會標成 cache，網頁看得出新鮮度）；
+    daily_close 只寫新抓到的價格，與 prices.db 的 save_quotes 一致"""
     now = datetime.now(TPE).isoformat(timespec='seconds')
-    for sym, q in quotes.items():
-        row = [
-            sym,
-            q.name,
-            q.price,
-            q.prev_close if q.prev_close is not None else '',
-            'TWD' if q.market == 'tw' else 'USD',
-            q.source,
-            q.quote_ts,
-            now,
-        ]
-        if sym in index:
-            rows[index[sym]] = row
-        else:
-            index[sym] = len(rows)
-            rows.append(row)
+    client.upsert('quotes', [
+        {
+            'symbol': q.symbol,
+            'price': q.price,
+            'prev_close': q.prev_close,
+            'source': q.source,
+            'quote_ts': q.quote_ts,
+            'fetched_at': now,
+        }
+        for q in quotes.values()
+    ], 'symbol')
 
-    # 補齊長度不一的舊列，避免 update 時欄數對不上
-    rows = [list(r) + [''] * (len(QUOTE_HEADER) - len(r)) for r in rows]
-    ws.update([QUOTE_HEADER] + rows, value_input_option='RAW')
-    return len(quotes)
+    fresh = [q for q in quotes.values() if not q.stale]
+    if fresh:
+        client.upsert('daily_close', [
+            {'symbol': q.symbol, 'date': q.quote_ts[:10], 'close': q.price, 'source': q.source}
+            for q in fresh
+        ], 'symbol,date')
 
 
 # --------------------------------------------------------------------------- #
@@ -463,40 +430,42 @@ def push_to_sheet(sh, quotes: dict[str, Quote]) -> int:
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument('--dry-run', action='store_true',
-                        help='抓價並印出結果，不寫 DB 也不寫 Sheet')
-    parser.add_argument('--no-sheet', action='store_true',
-                        help='只寫 prices.db，不寫 Sheet')
+                        help='抓價並印出結果，不寫 DB 也不寫 Supabase')
+    parser.add_argument('--no-remote', '--no-sheet', dest='no_remote', action='store_true',
+                        help='只寫 prices.db，不寫 Supabase（--no-sheet 為舊名稱）')
     parser.add_argument('--symbols',
-                        help='指定標的（逗號分隔），跳過從 Sheet 計算持倉；'
+                        help='指定標的（逗號分隔），跳過從交易紀錄計算持倉；'
                              '4~6 碼數字視為台股，其餘視為美股')
     parser.add_argument('--market-hours-only', action='store_true',
                         help='台股與美股都收盤時直接結束（給排程用）')
-    parser.add_argument('--profile', help='只跑指定帳本，預設全部')
+    parser.add_argument('--profile', help='只取指定帳本（Supabase books.name）的持倉，預設全部')
     args = parser.parse_args()
 
     if args.market_hours_only and not (tw_market_open() or us_market_open()):
         return 0
 
     config = load_config()
-    # 每個帳本的持倉各自算，抓價取聯集 —— 報價與代號綁定、與持有人無關，
-    # 兩本重疊的標的只會抓一次
-    books: list[tuple[dict, object, dict[str, str]]] = []
-    held: dict[str, str] = {}
+    # 指定標的又不寫遠端時，完全不需要 Supabase
+    client = None if args.symbols and (args.dry_run or args.no_remote) else from_config(config)
 
     if args.symbols:
         syms = [s.strip().upper() for s in args.symbols.split(',') if s.strip()]
         held = {s: ('TWD' if looks_tw(s) else 'USD') for s in syms}
     else:
-        for profile in profiles(config, args.profile):
-            sheet = open_sheet(profile)
-            holdings = resolve_holdings(sheet)
-            if not holdings:
-                print(f'[{profile["name"]}] 沒有需要報價的標的', file=sys.stderr)
-                continue
-            books.append((profile, sheet, holdings))
-            held.update(holdings)
+        # 各帳本持倉取聯集：兩本重疊的標的只抓一次
+        try:
+            if args.profile:
+                book_id = list_books(client, args.profile)[0]['id']
+                held = resolve_holdings(
+                    load_transactions(client, book_id), load_pledged_symbols(client, book_id)
+                )
+            else:
+                held = resolve_holdings(load_transactions(client), load_pledged_symbols(client))
+        except SupabaseError as e:
+            print(f'讀取 Supabase 持倉失敗：{e}', file=sys.stderr)
+            return 1
         if not held:
-            print('所有帳本都沒有需要報價的標的', file=sys.stderr)
+            print('沒有需要報價的標的', file=sys.stderr)
             return 1
 
     tw_symbols, us_symbols = split_by_market(held)
@@ -536,21 +505,20 @@ def main() -> int:
     save_quotes(conn, list(quotes.values()))
     conn.close()
 
-    # 各帳本只寫回自己持有的那幾檔
-    written = []
-    if not args.no_sheet:
-        if not books:
-            books = [(p, open_sheet(p), held) for p in profiles(config, args.profile)]
-        for profile, sheet, holdings in books:
-            subset = {s: q for s, q in quotes.items() if s in holdings}
-            push_to_sheet(sheet, subset)
-            written.append(f'{profile["name"]} {len(subset)} 檔')
+    remote = '未寫入'
+    if not args.no_remote and quotes:
+        try:
+            push_to_supabase(client, quotes)
+            remote = f'{len(quotes)} 檔'
+        except SupabaseError as e:
+            # prices.db 已經寫好，下一輪會再補寫 Supabase
+            print(f'寫入 Supabase 失敗：{e}', file=sys.stderr)
+            remote = '失敗'
 
     stale = sum(1 for q in quotes.values() if q.stale)
-    summary = '　'.join(written) if written else '未寫入'
     print(f'{datetime.now(TPE).isoformat(timespec="seconds")}  '
-          f'報價 {len(quotes)} 檔（快取 {stale} 檔）  Sheet：{summary}')
-    return 0
+          f'報價 {len(quotes)} 檔（快取 {stale} 檔）  Supabase：{remote}')
+    return 1 if remote == '失敗' else 0
 
 
 if __name__ == '__main__':

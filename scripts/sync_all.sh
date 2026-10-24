@@ -1,5 +1,5 @@
 #!/bin/bash
-# 每日自動同步永豐 + 富邦庫存與銀行餘額到 Google Sheet
+# 每日自動同步：永豐 + 富邦券商資料（Sheet）、銀行餘額與報價、淨值曲線（Supabase）
 # 由 launchd com.portfolio.sync 觸發（每日 14:00）
 PROJECT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PIPELINE="$PROJECT/pipeline"
@@ -24,7 +24,7 @@ echo "[富邦] 開始..." >> "$LOG"
 "$PY" sync_fubon.py >> "$LOG" 2>&1
 echo "[富邦] 完成" >> "$LOG"
 
-# 收盤後補一次報價，讓 Sheet「即時報價」停在當日收盤
+# 收盤後補一次報價，讓 Supabase quotes 停在當日收盤
 echo "[報價] 開始..." >> "$LOG"
 "$PY" fetch_prices.py >> "$LOG" 2>&1
 echo "[報價] 完成" >> "$LOG"

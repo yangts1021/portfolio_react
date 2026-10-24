@@ -75,6 +75,19 @@ class Supabase:
                 f'寫入 {table}',
             )
 
+    def update(self, table: str, filters: dict, data: dict) -> list[dict]:
+        """依條件更新部分欄位，回傳被更新的列"""
+        if not filters:
+            raise ValueError('update 必須指定條件')
+        res = self._check(
+            self.session.patch(
+                self._rest(table), params=filters, json=data,
+                headers={'Prefer': 'return=representation'},
+            ),
+            f'更新 {table}',
+        )
+        return res.json()
+
     def delete(self, table: str, filters: dict) -> None:
         """PostgREST 要求 DELETE 一定要帶條件，避免誤刪整張表"""
         if not filters:
@@ -106,3 +119,51 @@ def from_config(config: dict) -> Supabase:
         print('錯誤：config.json 缺少 supabase.url 或 supabase.service_role_key', file=sys.stderr)
         sys.exit(1)
     return Supabase(cfg['url'], cfg['service_role_key'])
+
+
+# --------------------------------------------------------------------------- #
+# pipeline 共用的讀取
+# --------------------------------------------------------------------------- #
+
+def list_books(client: Supabase, only: str | None = None) -> list[dict]:
+    """回傳 [{id, name}]，依建立順序。only 指定帳本名稱，找不到就結束程式"""
+    books = client.select('books', {'select': 'id,name', 'order': 'created_at'})
+    if only:
+        books = [b for b in books if b['name'] == only]
+        if not books:
+            print(f'錯誤：Supabase 找不到帳本「{only}」', file=sys.stderr)
+            sys.exit(1)
+    return books
+
+
+def load_transactions(client: Supabase, book_id: str | None = None) -> list[dict]:
+    """回傳 [{date, symbol, action, qty, price, currency}]，依日期排序。book_id 為空則取全部帳本"""
+    params = {'select': 'trade_date,symbol,action,qty,price,currency', 'order': 'trade_date,id'}
+    if book_id:
+        params['book_id'] = f'eq.{book_id}'
+    return [
+        {
+            'date': r['trade_date'],
+            'symbol': r['symbol'],
+            'action': r['action'],
+            'qty': float(r['qty']),
+            'price': float(r['price']),
+            'currency': r['currency'],
+        }
+        for r in client.select('transactions', params)
+    ]
+
+
+def load_pledged_symbols(client: Supabase, book_id: str | None = None) -> set[str]:
+    params = {'select': 'symbol'}
+    if book_id:
+        params['book_id'] = f'eq.{book_id}'
+    return {r['symbol'] for r in client.select('pledges', params)}
+
+
+def load_splits(client: Supabase) -> dict[str, list[tuple[str, float]]]:
+    """回傳 {代號: [(生效日, 比例), ...]}。分割事件是所有帳本共用的"""
+    splits: dict[str, list[tuple[str, float]]] = {}
+    for r in client.select('split_events', {'select': 'symbol,effective_date,ratio'}):
+        splits.setdefault(r['symbol'], []).append((r['effective_date'], float(r['ratio'])))
+    return splits

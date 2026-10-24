@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """
-重算每日資產淨值與損益曲線，寫入 Sheet「淨值歷史」。
+重算每日資產淨值與損益曲線，寫入 Supabase nav_history（每本帳本各自一份）。
+
+交易紀錄與分割事件讀 Supabase（分割事件共用），每日收盤與匯率讀本機 prices.db。
 
 不存曲線本身、只存每日收盤，曲線一律從交易紀錄重算 —— 這樣補登舊交易或
 新增分割事件之後，重跑一次歷史就會自動修正，而不是永遠錯下去。
@@ -13,8 +15,9 @@
 金額不需要調整（成本就是成本），均價則是 總成本 / 現行單位股數。
 
 用法：
-    python build_history.py              # 重算並寫入 Sheet
+    python build_history.py              # 重算並寫入 Supabase
     python build_history.py --dry-run    # 只印最後幾列
+    python build_history.py --profile LR # 只跑指定帳本（Supabase books.name）
     python build_history.py --csv out.csv
 """
 
@@ -23,75 +26,13 @@ from __future__ import annotations
 import argparse
 import csv
 import sys
-from datetime import datetime
 
 import pricedb
-from common import get_or_create_worksheet, load_config, open_sheet, profiles
+from common import load_config
+from supa import SupabaseError, from_config, list_books, load_splits, load_transactions
 
-TX_SHEET = '股票交易紀錄'
-SPLIT_SHEET = '分割事件'
-HISTORY_SHEET = '淨值歷史'
-HISTORY_HEADER = ['日期', '總市值TWD', '總成本TWD', '未實現TWD', '已實現累計TWD', '報酬率%']
-
-SELL_WORDS = ('賣', 'SELL', 'S')
-
-
-def parse_date(raw) -> str | None:
-    """Sheet 的日期可能是 2025/03/11 或 2025-03-11，統一成 YYYY-MM-DD"""
-    text = str(raw).strip()[:10]
-    for fmt in ('%Y-%m-%d', '%Y/%m/%d'):
-        try:
-            return datetime.strptime(text, fmt).date().isoformat()
-        except ValueError:
-            continue
-    return None
-
-
-def to_float(val) -> float:
-    try:
-        return float(str(val).replace(',', '').strip())
-    except (TypeError, ValueError):
-        return 0.0
-
-
-def read_transactions(sh) -> list[dict]:
-    rows = sh.worksheet(TX_SHEET).get_all_values()
-    txs = []
-    for row in rows[1:]:
-        if len(row) < 6:
-            continue
-        symbol = str(row[2]).strip().upper()
-        day = parse_date(row[0])
-        if not symbol or not day:
-            continue
-        txs.append({
-            'date': day,
-            'symbol': symbol,
-            'action': 'SELL' if str(row[3]).strip().upper() in SELL_WORDS else 'BUY',
-            'qty': to_float(row[4]),
-            'price': to_float(row[5]),
-            'currency': (str(row[6]).strip().upper() if len(row) > 6 else '') or 'TWD',
-        })
-    txs.sort(key=lambda t: t['date'])
-    return txs
-
-
-def read_splits(sh) -> dict[str, list[tuple[str, float]]]:
-    """回傳 {代號: [(生效日, 比例), ...]}"""
-    try:
-        rows = sh.worksheet(SPLIT_SHEET).get_all_values()
-    except Exception:  # noqa: BLE001  沒有這張表就當作沒有分割
-        return {}
-    splits: dict[str, list[tuple[str, float]]] = {}
-    for row in rows[1:]:
-        if len(row) < 3:
-            continue
-        symbol = str(row[0]).strip().upper()
-        day = parse_date(row[1])
-        ratio = to_float(row[2])
-        if symbol and day and ratio > 0:
-            splits.setdefault(symbol, []).append((day, ratio))
-    return splits
+CSV_HEADER = ['日期', '總市值TWD', '總成本TWD', '未實現TWD', '已實現累計TWD', '報酬率%']
+NAV_FIELDS = ['date', 'market_value', 'cost', 'unrealized', 'realized', 'roi']
 
 
 def split_factor(splits: dict, symbol: str, day: str) -> float:
@@ -211,29 +152,39 @@ def build(conn, txs: list[dict], splits: dict) -> list[list]:
     return rows
 
 
-def push_to_sheet(sh, rows: list[list]) -> None:
-    ws = get_or_create_worksheet(sh, HISTORY_SHEET, HISTORY_HEADER)
-    ws.clear()
-    ws.update([HISTORY_HEADER] + rows, value_input_option='RAW')
+def push_to_supabase(client, book_id: str, rows: list[list]) -> int:
+    """先 upsert 全部，再刪掉這次沒產生的日期 —— 過程中曲線不會有空窗。回傳刪除筆數"""
+    client.upsert(
+        'nav_history',
+        [{'book_id': book_id, **dict(zip(NAV_FIELDS, row))} for row in rows],
+        'book_id,date',
+    )
+    produced = {row[0] for row in rows}
+    existing = client.select('nav_history', {'book_id': f'eq.{book_id}', 'select': 'date'})
+    stale = sorted(r['date'] for r in existing if r['date'] not in produced)
+    for i in range(0, len(stale), 100):
+        chunk = ','.join(stale[i : i + 100])
+        client.delete('nav_history', {'book_id': f'eq.{book_id}', 'date': f'in.({chunk})'})
+    return len(stale)
 
 
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument('--dry-run', action='store_true', help='只印結果，不寫 Sheet')
+    parser.add_argument('--dry-run', action='store_true', help='只印結果，不寫 Supabase')
     parser.add_argument('--csv', help='另存一份 CSV（多帳本時檔名會加上帳本名）')
     parser.add_argument('--tail', type=int, default=8, help='印出最後幾列')
-    parser.add_argument('--profile', help='只跑指定帳本，預設全部')
+    parser.add_argument('--profile', help='只跑指定帳本（Supabase books.name），預設全部')
     args = parser.parse_args()
 
-    config = load_config()
-    books = profiles(config, args.profile)
+    client = from_config(load_config())
+    books = list_books(client, args.profile)
+    splits = load_splits(client)
     conn = pricedb.connect()
     failed = 0
 
-    for profile in books:
-        name = profile['name']
-        sh = open_sheet(profile)
-        rows = build(conn, read_transactions(sh), read_splits(sh))
+    for book in books:
+        name = book['name']
+        rows = build(conn, load_transactions(client, book['id']), splits)
         if not rows:
             print(f'[{name}] 沒有可用的歷史資料，請先跑 backfill_history.py', file=sys.stderr)
             failed += 1
@@ -249,13 +200,19 @@ def main() -> int:
             path = args.csv if len(books) == 1 else f'{args.csv.rsplit(".", 1)[0]}_{name}.csv'
             with open(path, 'w', newline='', encoding='utf-8') as f:
                 writer = csv.writer(f)
-                writer.writerow(HISTORY_HEADER)
+                writer.writerow(CSV_HEADER)
                 writer.writerows(rows)
             print(f'CSV 已寫入 {path}')
 
         if not args.dry_run:
-            push_to_sheet(sh, rows)
-            print(f'[{name}] Sheet「{HISTORY_SHEET}」已更新 {len(rows)} 列')
+            try:
+                removed = push_to_supabase(client, book['id'], rows)
+            except SupabaseError as e:
+                print(f'[{name}] 寫入 Supabase 失敗：{e}', file=sys.stderr)
+                failed += 1
+                continue
+            extra = f'，移除 {removed} 個過期日期' if removed else ''
+            print(f'[{name}] nav_history 已更新 {len(rows)} 列{extra}')
 
     conn.close()
     return 1 if failed == len(books) else 0

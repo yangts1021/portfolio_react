@@ -2,10 +2,10 @@ import os
 import sys
 import threading
 
-import gspread
 import shioaji as sj
 
-from common import enum_name, get_or_create_worksheet, load_config, open_spreadsheet
+from common import enum_name, get_or_create_worksheet, load_config, open_spreadsheet, profiles
+from supa import SupabaseError, from_config, list_books
 
 
 def login_sinopac(config):
@@ -94,30 +94,36 @@ def sync_trade_records(sh, api, positions):
         print('永豐交易紀錄：無新資料')
 
 
-def sync_bank_balance(sh, api):
-    """查詢交割帳戶餘額，更新 Google Sheet 銀行系統餘額"""
+def sync_bank_balance(config, api):
+    """查詢交割帳戶餘額，更新 Supabase bank_accounts 中主帳本的永豐那一列（TWD 欄）
+
+    主帳本 = config.json profiles 的第一本，對應 Supabase 同名帳本；
+    券商 API Key 只屬於這一本，其他帳本不動。
+    """
     result = api.account_balance()
     if result.status.value != 'Fetched':
         print(f'查詢餘額失敗：{result.errmsg}')
         return
 
-    balance = result.acc_balance
+    balance = float(result.acc_balance)
+    book_name = profiles(config)[0]['name']
 
     try:
-        ws = sh.worksheet('銀行系統餘額')
-    except gspread.WorksheetNotFound:
-        print('找不到「銀行系統餘額」工作表')
+        client = from_config(config)
+        book_id = list_books(client, book_name)[0]['id']
+        updated = client.update(
+            'bank_accounts',
+            {'book_id': f'eq.{book_id}', 'bank': 'ilike.*永豐*'},
+            {'twd': balance},
+        )
+    except SupabaseError as e:
+        print(f'更新永豐銀行餘額失敗：{e}')
         return
 
-    # 找到永豐大戶那一列
-    rows = ws.col_values(1)
-    for i, name in enumerate(rows):
-        if '永豐' in name:
-            ws.update_cell(i + 1, 3, balance)
-            print(f'永豐銀行餘額已更新：{balance}')
-            return
-
-    print('找不到永豐大戶的列')
+    if updated:
+        print(f'永豐銀行餘額已更新：{balance}（{updated[0]["bank"]}）')
+    else:
+        print(f'帳本「{book_name}」找不到名稱含「永豐」的銀行')
 
 
 def main():
@@ -129,7 +135,7 @@ def main():
         write_positions_to_sheet(sh, rows)
         print(f'庫存同步完成，共 {len(rows)} 筆')
         sync_trade_records(sh, api, positions)
-        sync_bank_balance(sh, api)
+        sync_bank_balance(config, api)
     except Exception as e:
         import traceback
         traceback.print_exc()
