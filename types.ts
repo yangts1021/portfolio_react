@@ -1,6 +1,7 @@
 export type ActionType = 'BUY' | 'SELL';
 export type CurrencyType = 'TWD' | 'USD' | 'HKD' | 'JPY';
-export type TabType = 'transactions' | 'overview' | 'bank' | 'pledge' | 'crypto';
+// 'crypto' is parked until Pionex/Bitfinex data moves to Supabase
+export type TabType = 'transactions' | 'overview' | 'bank' | 'pledge';
 export type CryptoSubTab = 'pionex' | 'bitfinex';
 export type RateMode = 'manual' | 'auto';
 
@@ -40,12 +41,19 @@ export interface BankAccount {
   loan: number;
 }
 
+// One book per former Google Sheet / pipeline profile
+export interface Book {
+  id: string;
+  name: string;
+}
+
 export interface PledgeRecord {
+  id?: number;
   transferDate: string;
   symbol: string;
   qty: number;
   broker: string;
-  collateralValue: number;
+  collateralValue?: number; // derived from live price, not stored
   loanDate: string;
   loanAmount: number;
   rate: number;

@@ -4,21 +4,17 @@ import { formatMoney, applySplitsToQty } from '../../utils/calculations';
 
 interface PledgeTabProps {
   pledgeData: PledgeRecord[];
-  setPledgeData: React.Dispatch<React.SetStateAction<PledgeRecord[]>>;
   splitEvents: SplitEvent[];
   currentPrices: Record<string, number>;
-  gasUrl: string;
-  showToast: (msg: string) => void;
+  onAddPledge: (p: Omit<PledgeRecord, 'id'>) => Promise<boolean>;
   hideAmounts: boolean;
 }
 
 const PledgeTab: React.FC<PledgeTabProps> = ({
   pledgeData,
-  setPledgeData,
   splitEvents,
   currentPrices,
-  gasUrl,
-  showToast,
+  onAddPledge,
   hideAmounts,
 }) => {
   const fm: typeof formatMoney = hideAmounts ? () => '••••' : formatMoney;
@@ -53,42 +49,26 @@ const PledgeTab: React.FC<PledgeTabProps> = ({
     e.preventDefault();
     const qty = parseFloat(form.qty);
     const symbol = form.symbol.toUpperCase();
+    if (!symbol || !(qty > 0) || !(parseFloat(form.loanAmount) >= 0)) return;
     const loanDate = new Date(form.loanDate);
     const repayDate = new Date(loanDate);
     repayDate.setMonth(repayDate.getMonth() + 6);
     repayDate.setDate(repayDate.getDate() - 1);
 
-    const newPledge: PledgeRecord = {
+    // 擔保價值依現價即時計算，不存進資料庫
+    setLoading(true);
+    const ok = await onAddPledge({
       transferDate: form.transferDate,
       symbol,
       qty,
       broker: form.broker,
-      collateralValue: qty * (currentPrices[symbol] || 0),
       loanDate: form.loanDate,
       loanAmount: parseFloat(form.loanAmount),
       rate: parseFloat(form.rate) / 100,
       repaymentDate: repayDate.toISOString().split('T')[0],
-    };
-
-    setPledgeData((prev) => [...prev, newPledge]);
-    setForm((f) => ({ ...f, symbol: '', qty: '', loanAmount: '' }));
-
-    if (gasUrl) {
-      setLoading(true);
-      try {
-        await fetch(gasUrl, {
-          method: 'POST',
-          mode: 'no-cors',
-          headers: { 'Content-Type': 'text/plain' },
-          body: JSON.stringify({ type: 'addPledge', ...newPledge }),
-        });
-        showToast('質押紀錄已新增');
-      } catch (err) {
-        showToast('雲端同步失敗');
-      } finally {
-        setLoading(false);
-      }
-    }
+    });
+    setLoading(false);
+    if (ok) setForm((f) => ({ ...f, symbol: '', qty: '', loanAmount: '' }));
   };
 
   return (
@@ -224,7 +204,7 @@ const PledgeTab: React.FC<PledgeTabProps> = ({
                   const isAdjusted = qty !== p.qty;
                   return (
                     <tr
-                      key={i}
+                      key={p.id ?? i}
                       className='hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors'
                     >
                       <td className='px-4 py-4'>

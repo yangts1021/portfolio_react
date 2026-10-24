@@ -4,20 +4,21 @@ import { BROKERS, CURRENCIES } from '../../constants';
 
 interface TransactionsTabProps {
   transactions: Transaction[];
-  setTransactions: React.Dispatch<React.SetStateAction<Transaction[]>>;
   splitEvents: SplitEvent[];
-  setSplitEvents: React.Dispatch<React.SetStateAction<SplitEvent[]>>;
-  gasUrl: string;
-  showToast: (msg: string) => void;
+  // Each returns/settles after Supabase confirms; local state is updated by App
+  onAddTransaction: (tx: Omit<Transaction, 'id'>) => Promise<boolean>;
+  onDeleteTransaction: (id: number) => Promise<void>;
+  onAddSplit: (split: Omit<SplitEvent, 'id'>) => Promise<boolean>;
+  onDeleteSplit: (id: number) => Promise<void>;
 }
 
 const TransactionsTab: React.FC<TransactionsTabProps> = ({
   transactions,
-  setTransactions,
   splitEvents,
-  setSplitEvents,
-  gasUrl,
-  showToast,
+  onAddTransaction,
+  onDeleteTransaction,
+  onAddSplit,
+  onDeleteSplit,
 }) => {
   const brokerOptions = useMemo(() => {
     const seen = new Set<string>();
@@ -59,48 +60,24 @@ const TransactionsTab: React.FC<TransactionsTabProps> = ({
     const ratio = parseFloat(splitForm.ratio);
     if (!splitForm.symbol || !splitForm.date || !(ratio > 0)) return;
 
-    const newSplit: SplitEvent = {
-      id: Date.now(),
+    setSplitLoading(true);
+    const ok = await onAddSplit({
       symbol: splitForm.symbol.toUpperCase().trim(),
       date: splitForm.date,
       ratio,
-    };
-    setSplitEvents((prev) => [...prev, newSplit]);
-    setSplitForm((f) => ({ ...f, symbol: '', ratio: '' }));
+    });
+    setSplitLoading(false);
+    if (ok) setSplitForm((f) => ({ ...f, symbol: '', ratio: '' }));
+  };
 
-    if (gasUrl) {
-      setSplitLoading(true);
-      try {
-        await fetch(gasUrl, {
-          method: 'POST',
-          mode: 'no-cors',
-          headers: { 'Content-Type': 'text/plain' },
-          body: JSON.stringify({
-            type: 'addSplit',
-            symbol: newSplit.symbol,
-            date: newSplit.date,
-            ratio: newSplit.ratio,
-          }),
-        });
-        showToast(`${newSplit.symbol} 分割事件已新增並同步雲端`);
-      } catch (err) {
-        showToast('分割事件已存於本地（雲端同步失敗）');
-      } finally {
-        setSplitLoading(false);
-      }
-    } else {
-      showToast('分割事件已新增');
+  const deleteSplit = (s: SplitEvent) => {
+    // 分割事件是所有帳本共用的
+    if (confirm(`確定要刪除 ${s.symbol} ${s.date} 的分割事件嗎？（所有帳本都會套用）`)) {
+      onDeleteSplit(s.id);
     }
   };
 
-  const deleteSplit = (id: number) => {
-    if (confirm('確定要刪除本地分割事件嗎？（Google Sheet 需手動刪除）')) {
-      setSplitEvents((prev) => prev.filter((s) => s.id !== id));
-      showToast('分割事件已移除');
-    }
-  };
-
-  // Keep form.broker valid when the option list changes (e.g. after GAS sync).
+  // Keep form.broker valid when the option list changes (e.g. after switching books).
   useEffect(() => {
     if (!brokerOptions.includes(form.broker)) {
       setForm((f) => ({ ...f, broker: brokerOptions[0] }));
@@ -124,43 +101,21 @@ const TransactionsTab: React.FC<TransactionsTabProps> = ({
 
     const qty = parseFloat(form.qty.replace(/,/g, ''));
     const price = parseFloat(form.price.replace(/,/g, ''));
+    if (!(qty > 0) || !(price >= 0)) return;
 
-    const newTx: Transaction = {
-      id: Date.now(),
+    setLoading(true);
+    const ok = await onAddTransaction({
       date: form.date,
       action: form.action,
       symbol: form.symbol.toUpperCase().trim(),
       broker: form.broker,
-      qty: qty,
-      price: price,
+      qty,
+      price,
       currency: form.currency,
-    };
-
-    setTransactions((prev) => [newTx, ...prev]);
-    setForm((f) => ({ ...f, symbol: '', qty: '', price: '' }));
-
-    if (gasUrl) {
-      setLoading(true);
-      try {
-        await fetch(gasUrl, {
-          method: 'POST',
-          mode: 'no-cors',
-          headers: { 'Content-Type': 'text/plain' },
-          body: JSON.stringify({
-            ...newTx,
-            action: newTx.action === 'BUY' ? '買' : '賣',
-            symbol: "'" + newTx.symbol,
-          }),
-        });
-        showToast('已新增並同步至雲端');
-      } catch (err) {
-        showToast('雲端同步失敗，已存於本地');
-      } finally {
-        setLoading(false);
-      }
-    } else {
-      showToast('已新增紀錄');
-    }
+    });
+    setLoading(false);
+    // 失敗時保留輸入內容，方便修正後重送
+    if (ok) setForm((f) => ({ ...f, symbol: '', qty: '', price: '' }));
   };
 
   const handleNumberChange = (field: 'qty' | 'price', value: string) => {
@@ -178,10 +133,10 @@ const TransactionsTab: React.FC<TransactionsTabProps> = ({
     }
   };
 
-  const deleteTx = (id: number) => {
-    if (confirm('確定要刪除本地紀錄嗎？')) {
-      setTransactions((prev) => prev.filter((t) => t.id !== id));
-      showToast('紀錄已移除');
+  const deleteTx = (tx: Transaction) => {
+    const label = `${tx.date} ${tx.action === 'BUY' ? '買入' : '賣出'} ${tx.symbol} ${tx.qty.toLocaleString()} 股`;
+    if (confirm(`確定要刪除這筆交易嗎？\n${label}`)) {
+      onDeleteTransaction(tx.id);
     }
   };
 
@@ -388,7 +343,7 @@ const TransactionsTab: React.FC<TransactionsTabProps> = ({
                         {s.ratio >= 1 ? `1 拆 ${s.ratio}` : `${1 / s.ratio} 併 1`}
                       </span>
                       <button
-                        onClick={() => deleteSplit(s.id)}
+                        onClick={() => deleteSplit(s)}
                         className='text-gray-400 hover:text-red-500'
                       >
                         <i className='fa-solid fa-trash-can'></i>
@@ -456,7 +411,7 @@ const TransactionsTab: React.FC<TransactionsTabProps> = ({
                     </td>
                     <td className='px-4 py-4 text-center'>
                       <button
-                        onClick={() => deleteTx(tx.id)}
+                        onClick={() => deleteTx(tx)}
                         className='text-gray-400 hover:text-red-500'
                       >
                         <i className='fa-solid fa-trash-can'></i>

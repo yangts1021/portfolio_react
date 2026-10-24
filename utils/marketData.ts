@@ -1,27 +1,11 @@
-// 價格來源：本機 pipeline/fetch_prices.py 定期抓價（台股富邦、美股 yfinance）
-// 寫入 Google Sheet「即時報價」，網頁透過 GAS 讀那張表。
-// GAS 讀不到時會自行退回 TWSE MIS，再退回 GOOGLEFINANCE 價格。
+// 價格來源：本機 pipeline/fetch_prices.py 定期抓價（台股富邦 → TWSE MIS → 快取，美股 yfinance），
+// 寫入 Supabase `quotes`，網頁直接讀那張表（utils/db.ts 的 loadQuotes）。
 
-export type PriceSource = 'live' | 'twse' | 'sheet';
-
-// 每檔報價的出處。live 來源直接沿用「即時報價」的來源欄，備援路徑則整批同源
+// 每檔報價的出處，持倉明細用來標示來源與報價時間
 export interface PriceQuoteMeta {
-  source: string; // fubon / twse_mis / yfinance / cache / googlefinance
+  source: string; // fubon / twse_mis / yfinance / cache
   quoteTs?: string;
 }
-
-export interface PriceResult {
-  prices: Record<string, number>;
-  meta: Record<string, PriceQuoteMeta>;
-  source: PriceSource | null;
-  updatedAt?: string;
-}
-
-export const PRICE_SOURCE_LABEL: Record<PriceSource, string> = {
-  live: '即時報價',
-  twse: 'TWSE',
-  sheet: 'Sheet 延遲價',
-};
 
 // 單檔來源顯示用的短標籤
 export const QUOTE_SOURCE_LABEL: Record<string, string> = {
@@ -34,36 +18,6 @@ export const QUOTE_SOURCE_LABEL: Record<string, string> = {
 
 export const quoteSourceLabel = (source?: string): string =>
   (source && QUOTE_SOURCE_LABEL[source]) || source || '';
-
-export const fetchPrices = async (symbols: string[], gasUrl: string): Promise<PriceResult> => {
-  if (symbols.length === 0 || !gasUrl) return { prices: {}, meta: {}, source: null };
-  const query = encodeURIComponent(symbols.join(','));
-
-  try {
-    const res = await fetch(`${gasUrl}?type=twPrices&symbols=${query}`);
-    if (res.ok) {
-      const json = await res.json();
-      if (json.twPrices && Object.keys(json.twPrices).length > 0) {
-        const source: PriceSource =
-          json.twSource === 'live' ? 'live' : json.twSource === 'sheet' ? 'sheet' : 'twse';
-        // 備援路徑沒有逐檔來源，整批標成同一個出處；
-        // live 但缺 twMeta（GAS 還沒更新）時不標，以免標錯
-        const batchSource =
-          source === 'sheet' ? 'googlefinance' : source === 'twse' ? 'twse_mis' : '';
-        const meta: Record<string, PriceQuoteMeta> = {};
-        Object.keys(json.twPrices).forEach((sym) => {
-          const entry = json.twMeta?.[sym] || (batchSource ? { source: batchSource } : null);
-          if (entry) meta[sym] = entry;
-        });
-        return { prices: json.twPrices, meta, source, updatedAt: json.twUpdatedAt };
-      }
-    }
-  } catch {
-    // 網路或 GAS 失敗，回傳空結果讓呼叫端提示
-  }
-
-  return { prices: {}, meta: {}, source: null };
-};
 
 // 台股交易時段（含開盤前試撮與收盤後緩衝）：平日 08:55–14:00
 export const isTwMarketHours = (): boolean => {

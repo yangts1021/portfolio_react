@@ -4,75 +4,26 @@ import { formatMoney } from '../../utils/calculations';
 
 interface BankTabProps {
   bankData: BankAccount[];
-  setBankData: React.Dispatch<React.SetStateAction<BankAccount[]>>;
   exchangeRates: ExchangeRates;
-  gasUrl: string;
-  showToast: (msg: string) => void;
+  onSave: (account: BankAccount) => Promise<void>;
   onRefresh: () => void;
   hideAmounts: boolean;
 }
 
-const BankTab: React.FC<BankTabProps> = ({
-  bankData,
-  setBankData,
-  exchangeRates,
-  gasUrl,
-  showToast,
-  onRefresh,
-  hideAmounts,
-}) => {
+const BankTab: React.FC<BankTabProps> = ({ bankData, onSave, onRefresh, hideAmounts }) => {
   const fm: typeof formatMoney = hideAmounts ? () => '••••' : formatMoney;
 
-  const refreshBankData = async () => {
-    if (!gasUrl) {
-      showToast('請先設定 Google Apps Script 網址');
-      return;
-    }
-    try {
-      const url = `${gasUrl}${gasUrl.includes('?') ? '&' : '?'}type=bankData&t=${Date.now()}`;
-      const response = await fetch(url);
-      if (!response.ok) throw new Error(`HTTP 錯誤 (${response.status})`);
-      const json = await response.json();
-      if (json.bankData) {
-        const parsed = json.bankData.map((b: any) => ({
-          bank: b.bank,
-          usd: parseFloat(String(b.usd).replace(/,/g, '')) || 0,
-          twd: parseFloat(String(b.twd).replace(/,/g, '')) || 0,
-          loan: parseFloat(String(b.loan).replace(/,/g, '')) || 0,
-        }));
-        setBankData(parsed);
-        showToast('銀行餘額已更新');
-      }
-    } catch (e) {
-      showToast('刷新失敗');
-    }
-  };
   // 分別計算所有銀行的 USD 與 TWD 原始總額
   const totalUSD = bankData.reduce((sum, b) => sum + (b.usd || 0), 0);
   const totalTWD = bankData.reduce((sum, b) => sum + (b.twd || 0), 0);
 
-  const handleUpdate = async (bank: string, field: keyof BankAccount, rawValue: string) => {
-    // 移除逗號並解析為數字
-    const val = parseFloat(rawValue.replace(/,/g, '')) || 0;
-
-    const updated = bankData.map((b) => (b.bank === bank ? { ...b, [field]: val } : b));
-    setBankData(updated);
-
-    if (gasUrl) {
-      const target = updated.find((b) => b.bank === bank);
-      if (!target) return;
-      try {
-        await fetch(gasUrl, {
-          method: 'POST',
-          mode: 'no-cors',
-          headers: { 'Content-Type': 'text/plain' },
-          body: JSON.stringify({ type: 'updateBank', ...target }),
-        });
-        showToast(`已儲存 ${bank} 的資料`);
-      } catch (e) {
-        showToast('雲端儲存失敗');
-      }
-    }
+  const handleUpdate = (bank: string, field: 'usd' | 'twd' | 'loan', rawValue: string) => {
+    const current = bankData.find((b) => b.bank === bank);
+    if (!current) return;
+    // 隱藏金額時欄位顯示 ••••，解析不出數字就不存，避免被當成 0 寫回雲端
+    const val = parseFloat(rawValue.replace(/,/g, ''));
+    if (isNaN(val) || val === current[field]) return;
+    onSave({ ...current, [field]: val });
   };
 
   return (
@@ -104,7 +55,7 @@ const BankTab: React.FC<BankTabProps> = ({
             <i className='fa-solid fa-building-columns text-blue-500 mr-2'></i>銀行系統餘額
           </h3>
           <button
-            onClick={refreshBankData}
+            onClick={onRefresh}
             className='text-xs text-white bg-green-600 hover:bg-green-700 px-3 py-1.5 rounded-md transition-colors shadow-sm'
           >
             <i className='fa-solid fa-rotate mr-1'></i> 刷新
@@ -131,15 +82,18 @@ const BankTab: React.FC<BankTabProps> = ({
                     <input
                       type='text'
                       key={`${b.bank}-usd-${b.usd}`}
+                      readOnly={hideAmounts}
                       defaultValue={fm(b.usd)}
                       onFocus={(e) => {
                         e.target.value = e.target.value.replace(/,/g, '');
                       }}
                       onBlur={(e) => {
                         handleUpdate(b.bank, 'usd', e.target.value);
-                        e.target.value = formatMoney(
-                          parseFloat(e.target.value.replace(/,/g, '')) || 0,
-                        );
+                        if (!hideAmounts) {
+                          e.target.value = formatMoney(
+                            parseFloat(e.target.value.replace(/,/g, '')) || 0,
+                          );
+                        }
                       }}
                       className='w-full text-right bg-transparent hover:bg-gray-100 dark:hover:bg-gray-800 focus:bg-white dark:focus:bg-gray-700 focus:ring-1 focus:ring-blue-500 rounded p-1 font-mono outline-none dark:text-gray-200'
                     />
@@ -148,15 +102,18 @@ const BankTab: React.FC<BankTabProps> = ({
                     <input
                       type='text'
                       key={`${b.bank}-twd-${b.twd}`}
+                      readOnly={hideAmounts}
                       defaultValue={fm(b.twd)}
                       onFocus={(e) => {
                         e.target.value = e.target.value.replace(/,/g, '');
                       }}
                       onBlur={(e) => {
                         handleUpdate(b.bank, 'twd', e.target.value);
-                        e.target.value = formatMoney(
-                          parseFloat(e.target.value.replace(/,/g, '')) || 0,
-                        );
+                        if (!hideAmounts) {
+                          e.target.value = formatMoney(
+                            parseFloat(e.target.value.replace(/,/g, '')) || 0,
+                          );
+                        }
                       }}
                       className='w-full text-right bg-transparent hover:bg-gray-100 dark:hover:bg-gray-800 focus:bg-white dark:focus:bg-gray-700 focus:ring-1 focus:ring-blue-500 rounded p-1 font-mono outline-none dark:text-gray-200'
                     />
@@ -165,15 +122,18 @@ const BankTab: React.FC<BankTabProps> = ({
                     <input
                       type='text'
                       key={`${b.bank}-loan-${b.loan}`}
+                      readOnly={hideAmounts}
                       defaultValue={fm(b.loan)}
                       onFocus={(e) => {
                         e.target.value = e.target.value.replace(/,/g, '');
                       }}
                       onBlur={(e) => {
                         handleUpdate(b.bank, 'loan', e.target.value);
-                        e.target.value = formatMoney(
-                          parseFloat(e.target.value.replace(/,/g, '')) || 0,
-                        );
+                        if (!hideAmounts) {
+                          e.target.value = formatMoney(
+                            parseFloat(e.target.value.replace(/,/g, '')) || 0,
+                          );
+                        }
                       }}
                       className='w-full text-right bg-transparent hover:bg-gray-100 dark:hover:bg-gray-800 focus:bg-white dark:focus:bg-gray-700 focus:ring-1 focus:ring-red-500 rounded p-1 font-mono text-red-500 dark:text-red-400 outline-none'
                     />

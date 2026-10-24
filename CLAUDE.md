@@ -16,27 +16,32 @@ CI runs `npm run lint` then `npm run build` on push to main/master.
 
 React 18 + TypeScript SPA for investment portfolio tracking. UI is in Traditional Chinese (zh-TW).
 
-**State management:** All application state lives in `App.tsx` using React hooks. No external state library. Data persists to `localStorage` (storage keys defined in `constants.ts`). Components receive data and callbacks via props — no Context API.
+**Data store:** Supabase (Postgres + RLS) is the source of truth; schema in `supabase/migrations/`. The browser signs in with email/password (sign-ups are disabled; the account is created in the Supabase dashboard) and talks to Supabase directly with the publishable key in `utils/supabase.ts` — that key is public by design, access is enforced by RLS. The service_role key lives only in `pipeline/config.json`. Google Sheet / GAS (`gas/`) are no longer read by the app.
+
+**Books:** each book (`books` table) is one portfolio, formerly one Google Sheet / pipeline profile. Book-scoped tables (`transactions`, `pledges`, `bank_accounts`, `nav_history`, `crypto_positions`) carry `book_id`; RLS lets only the owner read/write them via `owns_book()`. Shared tables (`symbols` with beta, `split_events`, `quotes`, `daily_close`, `daily_fx`) are the same for every book. The navbar dropdown switches books; the choice is remembered in localStorage.
+
+**State management:** All application state lives in `App.tsx` using React hooks. No external state library, no Context API. `App` is an auth gate; `PortfolioApp` holds the signed-in state. Book-scoped data is kept in one `bookState` object tagged with its `bookId` so a cache write can never land under another book. localStorage is only a first-paint cache (per-book key `my_book_cache:<id>`), cleared on sign-out.
 
 **Data flow:**
 
-- `App.tsx` → owns all state (transactions, bankData, pledgeData, currentPrices, exchangeRates, etc.)
-- Tab components (`components/Tabs/`) receive state slices and handler callbacks as props
-- Cloud sync via Google Apps Script POST/GET (URL stored in localStorage, configured in DataSyncModal)
+- `utils/db.ts` → every Supabase read/write (`loadBook`, `loadShared`, `loadQuotes`, `addTransaction`, `deleteTransaction`, `addSplit`, `saveBank`, `saveBeta`, …). Reads page past the 1000-row cap; deletes ask for the deleted row back because RLS turns a forbidden delete into a silent no-op.
+- `App.tsx` → owns state and the mutation handlers. Mutations write to Supabase first and update local state only on success (bank/beta edits are optimistic with rollback).
+- Tab components (`components/Tabs/`) receive state slices and async handler callbacks as props.
 
 **Key modules:**
 
 - `utils/calculations.ts` — `calculatePortfolio()` is the core function: processes transactions chronologically, computes average cost, inventory, realized/unrealized P&L, converts to TWD via exchange rates. Also has `getCategoryFromBeta()` for risk categorization and `formatMoney()` for number display.
-- `utils/marketData.ts` — `fetchPrices()` pulls quotes for held symbols (TW + US) through GAS `?type=twPrices`, returns `{prices, source, updatedAt}` where source is `live` / `twse` / `sheet`. Also market-hours helpers used by the 60s polling effect in `App.tsx`.
-- `types.ts` — All shared TypeScript interfaces (`Transaction`, `BankAccount`, `PledgeRecord`, `PortfolioItem`, `SplitEvent`, currency/action union types)
-- `constants.ts` — localStorage key names
+- `utils/marketData.ts` — quote source labels and market-hours helpers used by the 60s polling effect in `App.tsx` (quotes themselves come from Supabase `quotes`, written by the pipeline).
+- `types.ts` — All shared TypeScript interfaces (`Book`, `Transaction`, `BankAccount`, `PledgeRecord`, `PortfolioItem`, `SplitEvent`, currency/action union types)
+- `constants.ts` — localStorage key names (plus legacy Sheet-era keys removed on startup)
 
 **Tabs:**
 
 - `TransactionsTab` — Add/view buy/sell records, sorted display with "show all" toggle
 - `OverviewTab` — Portfolio analysis: P&L table, pie chart (Recharts), cash summary, exchange rates, beta-weighted allocation
 - `BankTab` — Multi-currency bank account management with inline editing
-- `PledgeTab` — Stock pledge/collateral loan tracking with auto-calculated repayment dates
+- `PledgeTab` — Stock pledge/collateral loan tracking with auto-calculated repayment dates; collateral value is computed from live prices, not stored
+- Crypto (`CryptoTab` / `PionexTab` / `BitfinexTab`) is unwired until Pionex/Bitfinex data moves from GAS into Supabase `crypto_positions`
 
 ## Data Pipeline (`pipeline/`)
 

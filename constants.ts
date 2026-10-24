@@ -10,17 +10,24 @@ export const BROKERS = ['國泰證券', '富邦證券', '元大證券', '台北�
 export const CURRENCIES = ['TWD', 'USD', 'HKD', 'JPY'];
 
 export const STORAGE_KEYS = {
-  TRANSACTIONS: 'my_transactions',
+  BOOK_ID: 'my_book_id',
+  // Per-book snapshot of transactions / bank / pledges / history, suffixed with `:<book_id>`
+  BOOK_CACHE: 'my_book_cache',
   PRICES: 'my_current_prices',
   PRICE_META: 'my_price_meta',
-  HISTORY: 'my_history',
   BETAS: 'my_symbol_betas',
-  BANK: 'my_bank_data',
-  PLEDGE: 'my_pledge_data',
   SPLITS: 'my_split_events',
-  GAS_URL: 'my_gas_url',
   RATES: 'my_exchange_rates',
   RATE_MODE: 'my_rate_mode',
-  PIONEX: 'my_pionex_data',
-  BITFINEX: 'my_bitfinex_data',
 };
+
+// Keys from the Google Sheet era, removed on startup
+export const LEGACY_STORAGE_KEYS = [
+  'my_transactions',
+  'my_bank_data',
+  'my_pledge_data',
+  'my_history',
+  'my_gas_url',
+  'my_pionex_data',
+  'my_bitfinex_data',
+];
