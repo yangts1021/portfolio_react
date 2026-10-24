@@ -49,7 +49,9 @@ Local Python scripts that feed the Google Sheet. **The web app never talks to br
 | `fetch_prices.py` | Holding quotes, replaces `GOOGLEFINANCE()` | 「即時報價」 + `prices.db` |
 | `backfill_history.py` | Backfills daily closes and FX via yfinance | `prices.db` |
 | `build_history.py` | Recomputes the asset/P&L curve from daily closes | 「淨值歷史」 |
+| `import_to_supabase.py` | One-time migration of Sheets + `prices.db` into Supabase (`--dry-run` / `--replace`) | Supabase |
 | `common.py` | Shared config loading, Sheet auth, worksheet access | — |
+| `supa.py` | Minimal Supabase client (PostgREST + Auth admin) over `requests` | — |
 | `pricedb.py` | `prices.db` schema and connection | — |
 
 **Price fallback chain** — every symbol always resolves to a number:

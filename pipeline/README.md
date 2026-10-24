@@ -10,7 +10,9 @@
 | `fetch_prices.py` | 持倉報價（取代 GOOGLEFINANCE） | 「即時報價」＋ `prices.db` |
 | `backfill_history.py` | 用 yfinance 回補每日收盤與匯率 | `prices.db` |
 | `build_history.py` | 由每日收盤重算資產／損益曲線 | 「淨值歷史」 |
+| `import_to_supabase.py` | 一次性把 Sheet 與 `prices.db` 搬進 Supabase | Supabase |
 | `common.py` | 共用的設定載入與 Sheet 連線 | — |
+| `supa.py` | Supabase 精簡 client（PostgREST + Auth admin） | — |
 | `pricedb.py` | `prices.db` 的結構與連線 | — |
 
 ## 報價的 fallback chain
@@ -102,6 +104,27 @@ R(D) = D 之後所有分割比例的乘積。換算後直接乘上調整後收�
 4. `config.json` 的 `profiles` 加一筆
 5. 跑 `backfill_history.py` 補歷史日線，再跑 `build_history.py`
 6. 網頁的資料同步視窗貼上那組 GAS 網址即可切換帳本
+
+## 匯入 Supabase
+
+正在把資料庫從 Google Sheet 換成 Supabase，schema 在 `../supabase/migrations/0001_init.sql`。
+`import_to_supabase.py` 把每個 profile 匯成一本 Supabase 帳本（`books.name` = profile 名稱）：
+
+- 帳本資料：股票交易紀錄、質押借貸資料、銀行系統餘額、Pionex、Bitfinex、淨值歷史
+- 共用資料：beta（即時價格與beta）、分割事件，以及 `prices.db` 的報價、日線、匯率
+- 不匯入：擔保價值與利息（Sheet 公式，改由前端計算）、券商原始資料、資產歷史紀錄
+
+需要 `config.json` 的 `supabase` 區塊（`url`、`service_role_key`、`owner_email`），
+且該 email 的帳號已在 Supabase 建立。
+
+```bash
+./venv/bin/python import_to_supabase.py --dry-run    # 只讀取並列出有問題的資料列
+./venv/bin/python import_to_supabase.py              # 匯入；帳本已有交易時會中止
+./venv/bin/python import_to_supabase.py --replace    # 清空帳本資料後重新匯入
+```
+
+讀 Sheet 時用原始值而不是顯示值，所以價格不會被四捨五入（例如 52.725 不會變成 52.73）。
+`--replace` 會清掉帳本裡所有交易，前端改接 Supabase 之後就不要再用。
 
 ## 環境
 
