@@ -49,8 +49,8 @@ Local Python scripts that feed the Google Sheet. **The web app never talks to br
 
 | Script | Does | Writes to |
 | --- | --- | --- |
-| `sync_fubon.py` | Fubon positions, last-30-day fills, unrealized P&L snapshot | 「富邦庫存」「富邦交易紀錄」「富邦持倉快照」 |
-| `sync_sinopac.py` | Sinopac positions, trade details, settlement balance | 「永豐庫存」「永豐交易紀錄」「銀行系統餘額」 |
+| `sync_fubon.py` | Fubon positions, last-30-day fills, unrealized P&L snapshot; settlement balance via `bank_remain` | 「富邦庫存」「富邦交易紀錄」「富邦持倉快照」 + Supabase `bank_accounts` row with `auto_source = 'fubon'` (TWD only) |
+| `sync_sinopac.py` | Sinopac positions, trade details, settlement balance | 「永豐庫存」「永豐交易紀錄」 + Supabase `bank_accounts` row with `auto_source = 'sinopac'` (TWD only) |
 | `fetch_prices.py` | Holding quotes, replaces `GOOGLEFINANCE()` | 「即時報價」 + `prices.db` |
 | `backfill_history.py` | Backfills daily closes and FX via yfinance | `prices.db` |
 | `build_history.py` | Recomputes the asset/P&L curve from daily closes | 「淨值歷史」 |

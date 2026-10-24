@@ -5,7 +5,7 @@ import threading
 import shioaji as sj
 
 from common import enum_name, get_or_create_worksheet, load_config, open_spreadsheet, profiles
-from supa import SupabaseError, from_config, list_books
+from supa import SupabaseError, from_config, list_books, update_auto_bank
 
 
 def login_sinopac(config):
@@ -95,7 +95,7 @@ def sync_trade_records(sh, api, positions):
 
 
 def sync_bank_balance(config, api):
-    """查詢交割帳戶餘額，更新 Supabase bank_accounts 中主帳本的永豐那一列（TWD 欄）
+    """查詢交割帳戶餘額，更新 Supabase 主帳本 auto_source = 'sinopac' 那一列的 TWD 欄
 
     主帳本 = config.json profiles 的第一本，對應 Supabase 同名帳本；
     券商 API Key 只屬於這一本，其他帳本不動。
@@ -111,19 +111,15 @@ def sync_bank_balance(config, api):
     try:
         client = from_config(config)
         book_id = list_books(client, book_name)[0]['id']
-        updated = client.update(
-            'bank_accounts',
-            {'book_id': f'eq.{book_id}', 'bank': 'ilike.*永豐*'},
-            {'twd': balance},
-        )
+        bank = update_auto_bank(client, book_id, 'sinopac', balance)
     except SupabaseError as e:
         print(f'更新永豐銀行餘額失敗：{e}')
         return
 
-    if updated:
-        print(f'永豐銀行餘額已更新：{balance}（{updated[0]["bank"]}）')
+    if bank:
+        print(f'永豐銀行餘額已更新：{balance}（{bank}）')
     else:
-        print(f'帳本「{book_name}」找不到名稱含「永豐」的銀行')
+        print(f'帳本「{book_name}」沒有標記 auto_source = sinopac 的銀行')
 
 
 def main():

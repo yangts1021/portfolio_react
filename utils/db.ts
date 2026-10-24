@@ -4,6 +4,7 @@
 import { supabase } from './supabase';
 import {
   BankAccount,
+  BankAutoSource,
   Book,
   CurrencyType,
   ActionType,
@@ -116,6 +117,8 @@ export async function loadBook(bookId: string): Promise<BookData> {
       usd: num(r.usd),
       twd: num(r.twd),
       loan: num(r.loan),
+      autoSource: (r.auto_source as BankAutoSource | null) ?? undefined,
+      updatedAt: r.updated_at ? String(r.updated_at) : undefined,
     })),
     pledgeData: pledges.map(toPledge),
     history: nav.map((r) => ({
@@ -252,6 +255,8 @@ export async function saveBank(bookId: string, b: BankAccount): Promise<void> {
     );
   fail('儲存銀行餘額', error);
 }
+
+// saveBank only sends the editable columns, so auto_source is never overwritten from the web.
 
 // Only the beta column is sent, so the pipeline-owned name/exchange columns stay untouched.
 export async function saveBeta(symbol: string, beta: number): Promise<void> {

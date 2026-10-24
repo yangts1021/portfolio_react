@@ -34,11 +34,15 @@ export interface HistoryPoint {
   roi: number; // 報酬率 %
 }
 
+export type BankAutoSource = 'sinopac' | 'fubon';
+
 export interface BankAccount {
   bank: string;
   usd: number;
   twd: number;
   loan: number;
+  autoSource?: BankAutoSource; // TWD 由 pipeline 依券商 API 每日更新
+  updatedAt?: string;
 }
 
 // One book per former Google Sheet / pipeline profile

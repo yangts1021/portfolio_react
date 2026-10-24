@@ -8,8 +8,10 @@ from common import (
     get_or_create_worksheet,
     load_config,
     open_spreadsheet,
+    profiles,
     resolve_path,
 )
+from supa import SupabaseError, from_config, list_books, update_auto_bank
 
 
 def login_fubon(config):
@@ -156,9 +158,40 @@ def sync_position_snapshot(sh, unrealized_data):
         print('富邦持倉快照：無新資料')
 
 
+def sync_bank_balance(config, sdk, account):
+    """查詢交割帳戶餘額，更新 Supabase 主帳本 auto_source = 'fubon' 那一列的 TWD 欄
+
+    主帳本 = config.json profiles 的第一本；USD 與貸款欄維持手動。
+    """
+    result = sdk.accounting.bank_remain(account)
+    if not result.is_success or result.data is None:
+        print(f'查詢富邦交割帳戶餘額失敗：{result.message}')
+        return
+    if str(result.data.currency) != 'TWD':
+        print(f'富邦交割帳戶幣別為 {result.data.currency}，非 TWD，略過')
+        return
+
+    balance = float(result.data.balance)
+    book_name = profiles(config)[0]['name']
+    try:
+        client = from_config(config)
+        book_id = list_books(client, book_name)[0]['id']
+        bank = update_auto_bank(client, book_id, 'fubon', balance)
+    except SupabaseError as e:
+        print(f'更新富邦銀行餘額失敗：{e}')
+        return
+
+    if bank:
+        print(f'富邦銀行餘額已更新：{balance}（{bank}）')
+    else:
+        print(f'帳本「{book_name}」沒有標記 auto_source = fubon 的銀行')
+
+
 def main():
     config = load_config()
     sdk, account = login_fubon(config)
+    # 先更新餘額：不依賴 Google Sheet，Sheet 出錯也不受影響
+    sync_bank_balance(config, sdk, account)
     sh = open_spreadsheet(config)
     inventories = fetch_inventories(sdk, account)
     unrealized = fetch_unrealized_pnl(sdk, account)

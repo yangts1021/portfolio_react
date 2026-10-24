@@ -1,5 +1,27 @@
 import React from 'react';
-import { BankAccount, ExchangeRates } from '../../types';
+import { BankAccount, BankAutoSource, ExchangeRates } from '../../types';
+
+const AUTO_SOURCE_LABEL: Record<BankAutoSource, string> = {
+  sinopac: '永豐',
+  fubon: '富邦',
+};
+
+// 自動更新列的備註：哪家 API、只更新 TWD、最後更新時間
+const autoNote = (b: BankAccount): string => {
+  if (!b.autoSource) return '';
+  const ts = b.updatedAt ? new Date(b.updatedAt) : null;
+  const when =
+    ts && !isNaN(ts.getTime())
+      ? ts.toLocaleString('zh-TW', {
+          month: 'numeric',
+          day: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit',
+          hour12: false,
+        })
+      : '';
+  return `${AUTO_SOURCE_LABEL[b.autoSource]} API 自動更新 TWD${when ? `・${when}` : ''}`;
+};
 import { formatMoney } from '../../utils/calculations';
 
 interface BankTabProps {
@@ -75,9 +97,21 @@ const BankTab: React.FC<BankTabProps> = ({ bankData, onSave, onRefresh, hideAmou
               {bankData.map((b) => (
                 <tr
                   key={b.bank}
-                  className='bg-white dark:bg-gray-900 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors'
+                  className={`${
+                    b.autoSource
+                      ? 'bg-sky-50 dark:bg-sky-950/40 hover:bg-sky-100 dark:hover:bg-sky-900/40'
+                      : 'bg-white dark:bg-gray-900 hover:bg-gray-50 dark:hover:bg-gray-800/50'
+                  } transition-colors`}
                 >
-                  <td className='px-6 py-4 font-bold text-gray-800 dark:text-white'>{b.bank}</td>
+                  <td className='px-6 py-4 font-bold text-gray-800 dark:text-white'>
+                    {b.bank}
+                    {b.autoSource && (
+                      <span className='block text-[10px] font-normal text-sky-600 dark:text-sky-400 mt-0.5'>
+                        <i className='fa-solid fa-rotate mr-1'></i>
+                        {autoNote(b)}
+                      </span>
+                    )}
+                  </td>
                   <td className='px-6 py-4'>
                     <input
                       type='text'

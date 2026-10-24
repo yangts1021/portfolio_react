@@ -167,3 +167,17 @@ def load_splits(client: Supabase) -> dict[str, list[tuple[str, float]]]:
     for r in client.select('split_events', {'select': 'symbol,effective_date,ratio'}):
         splits.setdefault(r['symbol'], []).append((r['effective_date'], float(r['ratio'])))
     return splits
+
+
+def update_auto_bank(client: Supabase, book_id: str, source: str, twd: float) -> str | None:
+    """更新帳本中 auto_source = source 那一列的 TWD，回傳銀行名稱；沒有標記的列回傳 None。
+
+    依 auto_source 欄位找列而不是比對名稱（見 supabase/migrations/0002），
+    每本帳本每個來源最多一列，由唯一索引保證。
+    """
+    updated = client.update(
+        'bank_accounts',
+        {'book_id': f'eq.{book_id}', 'auto_source': f'eq.{source}'},
+        {'twd': twd},
+    )
+    return updated[0]['bank'] if updated else None

@@ -11,8 +11,8 @@
 | `fetch_prices.py` | 持倉報價 | Supabase 交易、質押 | `prices.db` ＋ Supabase `quotes`、`daily_close` |
 | `backfill_history.py` | 用 yfinance 回補每日收盤與匯率 | Supabase 交易 | `prices.db` ＋ Supabase `daily_close`、`daily_fx` |
 | `build_history.py` | 由每日收盤重算資產／損益曲線 | Supabase 交易、分割；`prices.db` 日線 | Supabase `nav_history` |
-| `sync_sinopac.py` | 永豐庫存、交易明細、交割帳戶餘額 | 永豐 API | Sheet「永豐庫存」「永豐交易紀錄」；Supabase `bank_accounts` |
-| `sync_fubon.py` | 富邦庫存、近 30 天成交、未實現損益快照 | 富邦 API | Sheet「富邦庫存」「富邦交易紀錄」「富邦持倉快照」 |
+| `sync_sinopac.py` | 永豐庫存、交易明細、交割帳戶餘額 | 永豐 API | Sheet「永豐庫存」「永豐交易紀錄」＋ Supabase `bank_accounts` 中 `auto_source = sinopac` 那一列的 TWD |
+| `sync_fubon.py` | 富邦庫存、近 30 天成交、未實現損益快照、交割帳戶餘額 | 富邦 API | Sheet「富邦庫存」「富邦交易紀錄」「富邦持倉快照」＋ Supabase `bank_accounts` 中 `auto_source = fubon` 那一列的 TWD |
 | `import_to_supabase.py` | 一次性把 Sheet 與 `prices.db` 搬進 Supabase（已完成，留作紀錄） | Sheet | Supabase |
 | `common.py` | 共用的設定載入與 Sheet 連線 | — | — |
 | `supa.py` | Supabase 精簡 client，以及帳本、交易、質押、分割的共用讀取 | — | — |
