@@ -21,6 +21,7 @@ import {
 import {
   PriceQuoteMeta,
   QuoteFreshnessLevel,
+  calculateDayPnL,
   formatAge,
   quoteSourceLabel,
   summarizeQuoteFreshness,
@@ -316,6 +317,22 @@ const OverviewTab: React.FC<OverviewTabProps> = (props) => {
     };
   }, [portfolioItems, bankSummary, pledgeSummary, props.exchangeRates]);
 
+  // 今日損益：以昨收為基準，今天成交的部位改用成交價
+  const dayPnL = useMemo(
+    () =>
+      calculateDayPnL(
+        metrics.activeItems,
+        props.transactions,
+        props.priceMeta,
+        props.exchangeRates,
+      ),
+    [metrics.activeItems, props.transactions, props.priceMeta, props.exchangeRates],
+  );
+  // 帶正負號的金額與百分比；隱藏金額時連正負號一起遮掉
+  const signedMoney = (v: number) =>
+    props.hideAmounts ? fm(v) : `${v > 0 ? '+' : ''}${fm(v, { maximumFractionDigits: 0 })}`;
+  const signedPct = (v: number | null) => (v === null ? '' : `${v > 0 ? '+' : ''}${v.toFixed(2)}%`);
+
   const chartData = (Object.entries(metrics.categoryTotals) as [string, number][])
     .filter(([name, value]) => name !== '其他' && value > 0)
     .map(([name, value]) => ({ name, value }));
@@ -493,7 +510,27 @@ const OverviewTab: React.FC<OverviewTabProps> = (props) => {
         </div>
       </div>
 
-      <div className='order-3 md:order-none grid grid-cols-2 md:grid-cols-3 gap-3 md:gap-4'>
+      <div className='order-3 md:order-none grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4'>
+        <div
+          className='bg-white dark:bg-gray-900 p-3 md:p-5 rounded-xl shadow-sm border border-gray-100 dark:border-gray-800 text-center transition-colors'
+          title={
+            dayPnL.missingSymbols.length > 0
+              ? `沒有昨收、未計入：${dayPnL.missingSymbols.join('、')}`
+              : '現價對昨收；今天成交的部位以成交價計。美股為最近一個交易時段'
+          }
+        >
+          <div className='text-gray-500 dark:text-gray-400 text-xs md:text-sm uppercase tracking-wider mb-1 md:mb-2 font-medium'>
+            今日損益
+            {dayPnL.pct !== null && (
+              <span className={`ml-1.5 normal-case font-mono ${getColorClass(dayPnL.totalTWD)}`}>
+                {signedPct(dayPnL.pct)}
+              </span>
+            )}
+          </div>
+          <div className={`text-lg md:text-2xl font-bold ${getColorClass(dayPnL.totalTWD)}`}>
+            {signedMoney(dayPnL.totalTWD)}
+          </div>
+        </div>
         <div className='bg-white dark:bg-gray-900 p-3 md:p-5 rounded-xl shadow-sm border border-gray-100 dark:border-gray-800 text-center transition-colors'>
           <div className='text-gray-500 dark:text-gray-400 text-xs md:text-sm uppercase tracking-wider mb-1 md:mb-2 font-medium'>
             未實現損益
@@ -512,7 +549,7 @@ const OverviewTab: React.FC<OverviewTabProps> = (props) => {
             {fm(metrics.realizedPnLTWD, { maximumFractionDigits: 0 })}
           </div>
         </div>
-        <div className='col-span-2 md:col-span-1 bg-white dark:bg-gray-900 p-3 md:p-5 rounded-xl shadow-sm border border-gray-100 dark:border-gray-800 text-center border-l-4 border-blue-400 transition-colors'>
+        <div className='bg-white dark:bg-gray-900 p-3 md:p-5 rounded-xl shadow-sm border border-gray-100 dark:border-gray-800 text-center border-l-4 border-blue-400 transition-colors'>
           <div className='text-gray-500 dark:text-gray-400 text-xs md:text-sm uppercase tracking-wider mb-1 md:mb-2 font-medium'>
             總淨損益
           </div>
@@ -663,6 +700,7 @@ const OverviewTab: React.FC<OverviewTabProps> = (props) => {
         <div className='md:hidden divide-y divide-gray-100 dark:divide-gray-800'>
           {metrics.activeItems.map((p) => {
             const isExpanded = expandedSymbols.has(p.symbol);
+            const day = dayPnL.bySymbol[p.symbol];
             return (
               <div key={p.symbol}>
                 <button
@@ -709,17 +747,18 @@ const OverviewTab: React.FC<OverviewTabProps> = (props) => {
                   </div>
                   <div className='mt-1 flex items-center justify-between gap-2 text-[11px] text-gray-400 dark:text-gray-500'>
                     <div>
+                      今日{' '}
+                      {day ? (
+                        <span className={`font-mono font-bold ${getColorClass(day.pnlTWD)}`}>
+                          {signedMoney(day.pnlTWD)} {signedPct(day.pct)}
+                        </span>
+                      ) : (
+                        <span className='font-mono'>—</span>
+                      )}
+                      <span className='mx-1.5'>·</span>
                       市值{' '}
                       <span className='font-mono text-gray-600 dark:text-gray-300'>
                         {fm(p.marketValueTWD, { maximumFractionDigits: 0 })}
-                      </span>
-                      <span className='mx-1.5'>·</span>
-                      占比{' '}
-                      <span className='font-mono'>
-                        {metrics.totalAssets > 0
-                          ? ((p.marketValueTWD / metrics.totalAssets) * 100).toFixed(1)
-                          : '0.0'}
-                        %
                       </span>
                     </div>
                     <i
@@ -733,6 +772,15 @@ const OverviewTab: React.FC<OverviewTabProps> = (props) => {
                       <span className='text-gray-500 dark:text-gray-400'>均價（原幣）</span>
                       <span className='font-mono text-gray-700 dark:text-gray-200'>
                         {fm(p.avgCost)}
+                      </span>
+                    </div>
+                    <div className='flex items-center justify-between'>
+                      <span className='text-gray-500 dark:text-gray-400'>資產占比</span>
+                      <span className='font-mono text-gray-700 dark:text-gray-200'>
+                        {metrics.totalAssets > 0
+                          ? ((p.marketValueTWD / metrics.totalAssets) * 100).toFixed(1)
+                          : '0.0'}
+                        %
                       </span>
                     </div>
                     <div className='flex items-center justify-between'>
@@ -805,6 +853,7 @@ const OverviewTab: React.FC<OverviewTabProps> = (props) => {
                 <th className='px-4 py-3 text-right bg-yellow-50 dark:bg-yellow-900/10'>
                   即時市價
                 </th>
+                <th className='px-4 py-3 text-right'>今日損益(TWD)</th>
                 <th className='px-4 py-3 text-right'>市值(TWD)</th>
                 <th className='px-4 py-3 text-right'>均價(原幣)</th>
                 <th className='px-4 py-3 text-right'>未實現(TWD)</th>
@@ -816,6 +865,7 @@ const OverviewTab: React.FC<OverviewTabProps> = (props) => {
               {metrics.activeItems.map((p) => {
                 const hasMultiBroker = p.brokerDetails.length > 1;
                 const isExpanded = expandedSymbols.has(p.symbol);
+                const day = dayPnL.bySymbol[p.symbol];
                 return (
                   <React.Fragment key={p.symbol}>
                     <tr
@@ -866,6 +916,16 @@ const OverviewTab: React.FC<OverviewTabProps> = (props) => {
                         })}
                         <QuoteSourceTag meta={props.priceMeta[p.symbol]} />
                       </td>
+                      <td
+                        className={`px-4 py-4 text-right font-mono font-bold ${day ? getColorClass(day.pnlTWD) : 'text-gray-400'}`}
+                      >
+                        {day ? signedMoney(day.pnlTWD) : '—'}
+                        {day && day.pct !== null && (
+                          <span className='block mt-0.5 text-[9px] font-normal'>
+                            {signedPct(day.pct)}
+                          </span>
+                        )}
+                      </td>
                       <td className='px-4 py-4 text-right font-mono font-bold text-gray-800 dark:text-gray-100'>
                         {fm(p.marketValueTWD, { maximumFractionDigits: 0 })}
                       </td>
@@ -909,6 +969,7 @@ const OverviewTab: React.FC<OverviewTabProps> = (props) => {
                               maximumFractionDigits: 2,
                             })}
                           </td>
+                          <td className='px-4 py-2'></td>
                           <td className='px-4 py-2 text-right font-mono text-gray-600 dark:text-gray-300'>
                             {fm(bd.marketValueTWD, { maximumFractionDigits: 0 })}
                           </td>
@@ -934,7 +995,7 @@ const OverviewTab: React.FC<OverviewTabProps> = (props) => {
                 onClick={() => setShowSoldOut(!showSoldOut)}
               >
                 <td
-                  colSpan={10}
+                  colSpan={11}
                   className='px-4 py-2 text-center text-[10px] text-gray-500 dark:text-gray-400 font-bold uppercase tracking-wider'
                 >
                   <i className={`fa-solid fa-chevron-${showSoldOut ? 'up' : 'down'} mr-2`}></i>
@@ -951,7 +1012,7 @@ const OverviewTab: React.FC<OverviewTabProps> = (props) => {
                     >
                       <td className='px-4 py-4 text-[10px]'>{p.category}</td>
                       <td className='px-4 py-4'>{p.symbol}</td>
-                      <td colSpan={6}></td>
+                      <td colSpan={7}></td>
                       <td
                         className={`px-4 py-4 text-right font-bold ${getColorClass(p.realizedPnL)}`}
                       >
