@@ -128,7 +128,7 @@ interface PortfolioAppProps {
 }
 
 const PortfolioApp: React.FC<PortfolioAppProps> = ({ isDarkMode, setIsDarkMode, onSignOut }) => {
-  const [activeTab, setActiveTab] = useState<TabType>('transactions');
+  const [activeTab, setActiveTab] = useState<TabType>('overview');
 
   const [hideAmounts, setHideAmounts] = useState<boolean>(
     () => localStorage.getItem('hideAmounts') === 'true',
