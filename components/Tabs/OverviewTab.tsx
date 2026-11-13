@@ -56,7 +56,10 @@ const QUOTE_SOURCE_STYLE: Record<string, string> = {
 };
 
 // 價格下方的來源標示，滑過顯示完整報價時間
-const QuoteSourceTag: React.FC<{ meta?: PriceQuoteMeta }> = ({ meta }) => {
+const QuoteSourceTag: React.FC<{ meta?: PriceQuoteMeta; inline?: boolean }> = ({
+  meta,
+  inline,
+}) => {
   if (!meta?.source) return null;
   const ts = meta.quoteTs ? new Date(meta.quoteTs) : null;
   const valid = ts && !isNaN(ts.getTime());
@@ -64,13 +67,13 @@ const QuoteSourceTag: React.FC<{ meta?: PriceQuoteMeta }> = ({ meta }) => {
     ? ts.toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit', hour12: false })
     : '';
   return (
-    <div
-      className={`text-[9px] font-normal mt-0.5 ${QUOTE_SOURCE_STYLE[meta.source] || 'text-gray-400 dark:text-gray-500'}`}
+    <span
+      className={`${inline ? 'ml-1.5 text-[10px]' : 'block mt-0.5 text-[9px]'} font-normal ${QUOTE_SOURCE_STYLE[meta.source] || 'text-gray-400 dark:text-gray-500'}`}
       title={valid ? `報價時間 ${ts.toLocaleString('zh-TW', { hour12: false })}` : undefined}
     >
       {quoteSourceLabel(meta.source)}
       {clock && ` ${clock}`}
-    </div>
+    </span>
   );
 };
 
@@ -151,7 +154,7 @@ const QuoteFreshnessBar: React.FC<{
 
   return (
     <div
-      className={`flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-2 rounded-xl border text-xs transition-colors ${style.box}`}
+      className={`order-1 md:order-none flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-2 rounded-xl border text-xs transition-colors ${style.box}`}
       title={
         f.updatedAt
           ? `最舊一筆報價寫入於 ${f.updatedAt.toLocaleString('zh-TW', { hour12: false })}`
@@ -345,10 +348,10 @@ const OverviewTab: React.FC<OverviewTabProps> = (props) => {
   };
 
   return (
-    <div className='animate-fade-in space-y-6'>
+    <div className='animate-fade-in flex flex-col gap-4 md:gap-6'>
       <QuoteFreshnessBar holdings={metrics.activeItems} meta={props.priceMeta} />
 
-      <div className='grid grid-cols-1 md:grid-cols-2 gap-4'>
+      <div className='order-6 md:order-none grid grid-cols-1 md:grid-cols-2 gap-4'>
         {/* 現金 & 匯率卡片 */}
         <div className='bg-white dark:bg-gray-900 p-4 rounded-xl shadow-sm border border-gray-100 dark:border-gray-800 transition-colors'>
           <div className='flex justify-between items-center mb-4'>
@@ -463,56 +466,58 @@ const OverviewTab: React.FC<OverviewTabProps> = (props) => {
         </div>
       </div>
 
-      <div className='grid grid-cols-1 md:grid-cols-3 gap-4'>
-        <div className='bg-white dark:bg-gray-900 p-5 rounded-xl shadow-sm border border-gray-100 dark:border-gray-800 text-center transition-colors'>
-          <div className='text-gray-500 dark:text-gray-400 text-sm uppercase tracking-wider mb-2 font-medium'>
+      <div className='order-4 md:order-none grid grid-cols-2 md:grid-cols-3 gap-3 md:gap-4'>
+        <div className='bg-white dark:bg-gray-900 p-3 md:p-5 rounded-xl shadow-sm border border-gray-100 dark:border-gray-800 text-center transition-colors'>
+          <div className='text-gray-500 dark:text-gray-400 text-xs md:text-sm uppercase tracking-wider mb-1 md:mb-2 font-medium'>
             證券市值
           </div>
-          <div className='text-2xl font-bold dark:text-white'>
+          <div className='text-lg md:text-2xl font-bold dark:text-white'>
             {fm(metrics.stockMarketValueTWD, { maximumFractionDigits: 0 })}
           </div>
         </div>
-        <div className='bg-white dark:bg-gray-900 p-5 rounded-xl shadow-sm border border-gray-100 dark:border-gray-800 text-center transition-colors'>
-          <div className='text-gray-500 dark:text-gray-400 text-sm uppercase tracking-wider mb-2 font-medium'>
+        <div className='bg-white dark:bg-gray-900 p-3 md:p-5 rounded-xl shadow-sm border border-gray-100 dark:border-gray-800 text-center transition-colors'>
+          <div className='text-gray-500 dark:text-gray-400 text-xs md:text-sm uppercase tracking-wider mb-1 md:mb-2 font-medium'>
             總投入成本
           </div>
-          <div className='text-2xl font-bold dark:text-white'>
+          <div className='text-lg md:text-2xl font-bold dark:text-white'>
             {fm(metrics.stockCostTWD, { maximumFractionDigits: 0 })}
           </div>
         </div>
-        <div className='bg-white dark:bg-gray-900 p-5 rounded-xl shadow-sm border border-gray-100 dark:border-gray-800 text-center transition-colors'>
-          <div className='text-gray-500 dark:text-gray-400 text-sm uppercase tracking-wider mb-2 font-medium'>
+        <div className='col-span-2 md:col-span-1 bg-white dark:bg-gray-900 p-3 md:p-5 rounded-xl shadow-sm border border-gray-100 dark:border-gray-800 text-center transition-colors'>
+          <div className='text-gray-500 dark:text-gray-400 text-xs md:text-sm uppercase tracking-wider mb-1 md:mb-2 font-medium'>
             銀行總餘額
           </div>
-          <div className='text-2xl font-bold dark:text-white'>
+          <div className='text-lg md:text-2xl font-bold dark:text-white'>
             {fm(bankSummary.totalCashTWD, { maximumFractionDigits: 0 })}
           </div>
         </div>
       </div>
 
-      <div className='grid grid-cols-1 md:grid-cols-3 gap-4'>
-        <div className='bg-white dark:bg-gray-900 p-5 rounded-xl shadow-sm border border-gray-100 dark:border-gray-800 text-center transition-colors'>
-          <div className='text-gray-500 dark:text-gray-400 text-sm uppercase tracking-wider mb-2 font-medium'>
+      <div className='order-3 md:order-none grid grid-cols-2 md:grid-cols-3 gap-3 md:gap-4'>
+        <div className='bg-white dark:bg-gray-900 p-3 md:p-5 rounded-xl shadow-sm border border-gray-100 dark:border-gray-800 text-center transition-colors'>
+          <div className='text-gray-500 dark:text-gray-400 text-xs md:text-sm uppercase tracking-wider mb-1 md:mb-2 font-medium'>
             未實現損益
           </div>
-          <div className={`text-2xl font-bold ${getColorClass(metrics.unrealizedPnLTWD)}`}>
+          <div
+            className={`text-lg md:text-2xl font-bold ${getColorClass(metrics.unrealizedPnLTWD)}`}
+          >
             {fm(metrics.unrealizedPnLTWD, { maximumFractionDigits: 0 })}
           </div>
         </div>
-        <div className='bg-white dark:bg-gray-900 p-5 rounded-xl shadow-sm border border-gray-100 dark:border-gray-800 text-center transition-colors'>
-          <div className='text-gray-500 dark:text-gray-400 text-sm uppercase tracking-wider mb-2 font-medium'>
+        <div className='bg-white dark:bg-gray-900 p-3 md:p-5 rounded-xl shadow-sm border border-gray-100 dark:border-gray-800 text-center transition-colors'>
+          <div className='text-gray-500 dark:text-gray-400 text-xs md:text-sm uppercase tracking-wider mb-1 md:mb-2 font-medium'>
             已實現總損益
           </div>
-          <div className={`text-2xl font-bold ${getColorClass(metrics.realizedPnLTWD)}`}>
+          <div className={`text-lg md:text-2xl font-bold ${getColorClass(metrics.realizedPnLTWD)}`}>
             {fm(metrics.realizedPnLTWD, { maximumFractionDigits: 0 })}
           </div>
         </div>
-        <div className='bg-white dark:bg-gray-900 p-5 rounded-xl shadow-sm border border-gray-100 dark:border-gray-800 text-center border-l-4 border-blue-400 transition-colors'>
-          <div className='text-gray-500 dark:text-gray-400 text-sm uppercase tracking-wider mb-2 font-medium'>
+        <div className='col-span-2 md:col-span-1 bg-white dark:bg-gray-900 p-3 md:p-5 rounded-xl shadow-sm border border-gray-100 dark:border-gray-800 text-center border-l-4 border-blue-400 transition-colors'>
+          <div className='text-gray-500 dark:text-gray-400 text-xs md:text-sm uppercase tracking-wider mb-1 md:mb-2 font-medium'>
             總淨損益
           </div>
           <div
-            className={`text-2xl font-bold ${getColorClass(metrics.unrealizedPnLTWD + metrics.realizedPnLTWD)}`}
+            className={`text-lg md:text-2xl font-bold ${getColorClass(metrics.unrealizedPnLTWD + metrics.realizedPnLTWD)}`}
           >
             {fm(metrics.unrealizedPnLTWD + metrics.realizedPnLTWD, {
               maximumFractionDigits: 0,
@@ -521,8 +526,8 @@ const OverviewTab: React.FC<OverviewTabProps> = (props) => {
         </div>
       </div>
 
-      <div className='bg-gradient-to-br from-blue-600 to-blue-800 dark:from-blue-700 dark:to-blue-900 p-6 rounded-xl shadow-md text-center text-white transition-all'>
-        <div className='text-blue-100 text-sm uppercase tracking-wider mb-2 font-medium'>
+      <div className='order-2 md:order-none bg-gradient-to-br from-blue-600 to-blue-800 dark:from-blue-700 dark:to-blue-900 p-4 md:p-6 rounded-xl shadow-md text-center text-white transition-all'>
+        <div className='text-blue-100 text-xs md:text-sm uppercase tracking-wider mb-1 md:mb-2 font-medium'>
           淨資產總額
         </div>
         <div className='text-4xl md:text-5xl font-bold'>
@@ -534,10 +539,10 @@ const OverviewTab: React.FC<OverviewTabProps> = (props) => {
         </div>
       </div>
 
-      <div className='grid grid-cols-1 lg:grid-cols-3 gap-6'>
+      <div className='order-7 md:order-none grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-6'>
         <div className='bg-white dark:bg-gray-900 p-5 rounded-xl shadow-sm border border-gray-100 dark:border-gray-800 transition-colors'>
           <h3 className='text-sm font-bold text-gray-700 dark:text-gray-200 mb-4'>資產配置比例</h3>
-          <div className='h-72'>
+          <div className='h-56 md:h-72'>
             <ResponsiveContainer width='100%' height='100%'>
               <PieChart margin={{ top: 20, right: 50, bottom: 20, left: 50 }}>
                 <Pie
@@ -578,35 +583,37 @@ const OverviewTab: React.FC<OverviewTabProps> = (props) => {
 
         <div className='lg:col-span-2 bg-white dark:bg-gray-900 p-5 rounded-xl shadow-sm border border-gray-100 dark:border-gray-800 flex flex-col justify-between transition-colors'>
           <div>
-            <div className='flex justify-between items-start mb-6'>
+            <div className='flex justify-between items-start mb-4 md:mb-6'>
               <h3 className='text-sm font-bold text-gray-700 dark:text-gray-200 uppercase tracking-wider'>
                 投資曝險 & 組合 Beta
               </h3>
             </div>
 
-            <div className='flex flex-col md:flex-row gap-6 mb-8'>
+            <div className='flex flex-col md:flex-row gap-3 md:gap-6 md:mb-8'>
               {/* 放大後的 Beta 字卡 */}
-              <div className='flex-none w-full md:w-48 bg-gray-900 dark:bg-blue-600 text-white rounded-2xl p-6 shadow-xl flex flex-col items-center justify-center border-b-4 border-blue-500 dark:border-blue-400 transition-all hover:scale-105 duration-300'>
+              <div className='flex-none w-full md:w-48 bg-gray-900 dark:bg-blue-600 text-white rounded-2xl p-4 md:p-6 shadow-xl flex flex-col items-center justify-center border-b-4 border-blue-500 dark:border-blue-400 transition-all hover:scale-105 duration-300'>
                 <div className='text-sm uppercase font-bold tracking-widest opacity-80 mb-2'>
                   Portfolio Beta
                 </div>
-                <div className='text-5xl font-black font-mono'>{metrics.totalBeta.toFixed(2)}</div>
+                <div className='text-4xl md:text-5xl font-black font-mono'>
+                  {metrics.totalBeta.toFixed(2)}
+                </div>
                 <div className='text-[10px] mt-2 px-2 py-0.5 bg-white/20 rounded-full font-bold'>
                   市場敏感度
                 </div>
               </div>
 
               {/* 類別權重網格 */}
-              <div className='flex-1 grid grid-cols-1 sm:grid-cols-3 gap-4'>
+              <div className='flex-1 grid grid-cols-3 gap-2 md:gap-4'>
                 {(Object.entries(metrics.categoryTotals) as [string, number][])
                   .filter(([name]) => name !== '其他')
                   .map(([name, val]) => (
                     <div
                       key={name}
-                      className='p-4 bg-gray-50 dark:bg-gray-800/50 rounded-xl border border-gray-100 dark:border-gray-800 shadow-sm flex flex-col justify-center transition-all hover:shadow-md'
+                      className='p-2.5 md:p-4 bg-gray-50 dark:bg-gray-800/50 rounded-xl border border-gray-100 dark:border-gray-800 shadow-sm flex flex-col justify-center transition-all hover:shadow-md'
                     >
-                      <div className='flex justify-between items-start mb-1'>
-                        <div className='text-sm text-gray-400 dark:text-gray-500 font-bold uppercase tracking-wide flex items-center'>
+                      <div className='flex flex-wrap justify-between items-start gap-1 mb-1'>
+                        <div className='text-xs md:text-sm text-gray-400 dark:text-gray-500 font-bold uppercase tracking-wide flex items-center'>
                           <span
                             className='w-1.5 h-1.5 rounded-full mr-1.5'
                             style={{ backgroundColor: CATEGORY_COLORS[name] }}
@@ -617,7 +624,7 @@ const OverviewTab: React.FC<OverviewTabProps> = (props) => {
                           {categoryRules[name]}
                         </div>
                       </div>
-                      <div className='text-2xl font-bold dark:text-white font-mono'>
+                      <div className='text-lg md:text-2xl font-bold dark:text-white font-mono'>
                         {metrics.totalAssets > 0
                           ? ((val / metrics.totalAssets) * 100).toFixed(1)
                           : '0.0'}
@@ -634,13 +641,15 @@ const OverviewTab: React.FC<OverviewTabProps> = (props) => {
         </div>
       </div>
 
-      <HistoryChart
-        history={props.history}
-        isDarkMode={props.isDarkMode}
-        hideAmounts={props.hideAmounts}
-      />
+      <div className='order-8 md:order-none'>
+        <HistoryChart
+          history={props.history}
+          isDarkMode={props.isDarkMode}
+          hideAmounts={props.hideAmounts}
+        />
+      </div>
 
-      <div className='bg-white dark:bg-gray-900 rounded-xl shadow-sm border border-gray-100 dark:border-gray-800 overflow-hidden transition-colors'>
+      <div className='order-5 md:order-none bg-white dark:bg-gray-900 rounded-xl shadow-sm border border-gray-100 dark:border-gray-800 overflow-hidden transition-colors'>
         <div className='p-4 border-b border-gray-100 dark:border-gray-800 bg-gray-50 dark:bg-gray-800/50 flex justify-between items-center'>
           <h3 className='font-bold text-gray-700 dark:text-gray-200'>持倉明細與即時損益</h3>
           <button
@@ -650,7 +659,142 @@ const OverviewTab: React.FC<OverviewTabProps> = (props) => {
             <i className='fa-solid fa-rotate mr-1'></i> 即時更新
           </button>
         </div>
-        <div className='overflow-x-auto'>
+        {/* 手機版：一檔一張卡片，十欄的表格在窄螢幕上只能橫向捲動 */}
+        <div className='md:hidden divide-y divide-gray-100 dark:divide-gray-800'>
+          {metrics.activeItems.map((p) => {
+            const isExpanded = expandedSymbols.has(p.symbol);
+            return (
+              <div key={p.symbol}>
+                <button
+                  type='button'
+                  onClick={() => toggleExpand(p.symbol)}
+                  aria-expanded={isExpanded}
+                  className='w-full text-left px-4 py-3 active:bg-gray-50 dark:active:bg-gray-800/50 transition-colors'
+                >
+                  <div className='flex items-baseline justify-between gap-2'>
+                    <div className='min-w-0 flex items-center gap-1.5'>
+                      <span
+                        className='flex-none px-1.5 py-0.5 rounded text-white font-bold text-[10px]'
+                        style={{ backgroundColor: CATEGORY_COLORS[p.category] }}
+                      >
+                        {p.category}
+                      </span>
+                      <span className='font-bold text-base text-gray-800 dark:text-gray-100 truncate'>
+                        {p.symbol}
+                      </span>
+                      <span className='text-[10px] text-gray-400 dark:text-gray-500'>
+                        {p.currency}
+                      </span>
+                    </div>
+                    <div
+                      className={`flex-none font-mono font-bold text-base ${getColorClass(p.unrealizedPnLTWD)}`}
+                    >
+                      {fm(p.unrealizedPnLTWD, { maximumFractionDigits: 0 })}
+                    </div>
+                  </div>
+                  <div className='mt-1 flex items-baseline justify-between gap-2 text-xs'>
+                    <div className='min-w-0 font-mono text-gray-600 dark:text-gray-300'>
+                      {p.inventory.toLocaleString(undefined, { maximumFractionDigits: 4 })} 股 @{' '}
+                      <span className='font-bold'>
+                        {p.currentPrice.toLocaleString(undefined, {
+                          minimumFractionDigits: 2,
+                          maximumFractionDigits: 2,
+                        })}
+                      </span>
+                      <QuoteSourceTag meta={props.priceMeta[p.symbol]} inline />
+                    </div>
+                    <div className={`flex-none font-mono font-bold ${getColorClass(p.roi)}`}>
+                      {p.roi.toFixed(2)}%
+                    </div>
+                  </div>
+                  <div className='mt-1 flex items-center justify-between gap-2 text-[11px] text-gray-400 dark:text-gray-500'>
+                    <div>
+                      市值{' '}
+                      <span className='font-mono text-gray-600 dark:text-gray-300'>
+                        {fm(p.marketValueTWD, { maximumFractionDigits: 0 })}
+                      </span>
+                      <span className='mx-1.5'>·</span>
+                      占比{' '}
+                      <span className='font-mono'>
+                        {metrics.totalAssets > 0
+                          ? ((p.marketValueTWD / metrics.totalAssets) * 100).toFixed(1)
+                          : '0.0'}
+                        %
+                      </span>
+                    </div>
+                    <i
+                      className={`fa-solid fa-chevron-${isExpanded ? 'up' : 'down'} text-[10px]`}
+                    ></i>
+                  </div>
+                </button>
+                {isExpanded && (
+                  <div className='px-4 pb-3 space-y-2 text-xs bg-gray-50 dark:bg-gray-800/40'>
+                    <div className='flex items-center justify-between pt-3'>
+                      <span className='text-gray-500 dark:text-gray-400'>均價（原幣）</span>
+                      <span className='font-mono text-gray-700 dark:text-gray-200'>
+                        {fm(p.avgCost)}
+                      </span>
+                    </div>
+                    <div className='flex items-center justify-between'>
+                      <span className='text-gray-500 dark:text-gray-400'>Beta</span>
+                      <BetaInput value={p.beta} onCommit={(v) => props.onBetaChange(p.symbol, v)} />
+                    </div>
+                    {p.brokerDetails.map((bd) => (
+                      <div
+                        key={bd.broker}
+                        className='flex items-center justify-between border-t border-gray-200 dark:border-gray-700 pt-2'
+                      >
+                        <div className='text-gray-500 dark:text-gray-400'>
+                          <i className='fa-solid fa-building-columns mr-1.5 text-[10px]'></i>
+                          {bd.broker}
+                          <span className='ml-2 font-mono'>
+                            {bd.inventory.toLocaleString(undefined, { maximumFractionDigits: 4 })}{' '}
+                            股
+                          </span>
+                          <span className='ml-2 font-mono'>均價 {fm(bd.avgCost)}</span>
+                        </div>
+                        <div
+                          className={`font-mono font-bold ${getColorClass(bd.unrealizedPnLTWD)}`}
+                        >
+                          {fm(bd.unrealizedPnLTWD, { maximumFractionDigits: 0 })}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+          <button
+            type='button'
+            onClick={() => setShowSoldOut(!showSoldOut)}
+            className='w-full bg-gray-100 dark:bg-gray-800 px-4 py-3 text-center text-[11px] text-gray-500 dark:text-gray-400 font-bold tracking-wider'
+          >
+            <i className={`fa-solid fa-chevron-${showSoldOut ? 'up' : 'down'} mr-2`}></i>
+            已結清倉位
+          </button>
+          {showSoldOut &&
+            portfolioItems
+              .filter((p) => p.inventory <= 0.000001)
+              .map((p) => (
+                <div
+                  key={p.symbol}
+                  className='flex items-center justify-between px-4 py-3 text-xs text-gray-400 dark:text-gray-500'
+                >
+                  <span>
+                    {p.symbol} <span className='text-[10px]'>{p.category}</span>
+                  </span>
+                  <span className={`font-mono font-bold ${getColorClass(p.realizedPnL)}`}>
+                    已實現{' '}
+                    {fm(p.realizedPnL * (props.exchangeRates[p.currency] || 1), {
+                      maximumFractionDigits: 0,
+                    })}
+                  </span>
+                </div>
+              ))}
+        </div>
+
+        <div className='hidden md:block overflow-x-auto'>
           <table className='w-full text-xs text-left text-gray-500 dark:text-gray-400'>
             <thead className='text-gray-700 dark:text-gray-300 uppercase bg-gray-50 dark:bg-gray-800'>
               <tr>

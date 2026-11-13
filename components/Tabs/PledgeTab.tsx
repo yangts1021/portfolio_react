@@ -72,16 +72,18 @@ const PledgeTab: React.FC<PledgeTabProps> = ({
   };
 
   return (
-    <div className='animate-fade-in space-y-6'>
-      <div className='grid grid-cols-1 md:grid-cols-2 gap-4'>
-        <div className='bg-white dark:bg-gray-900 p-5 rounded-xl shadow-sm border border-gray-100 dark:border-gray-800 text-center transition-colors'>
+    <div className='animate-fade-in space-y-4 md:space-y-6'>
+      <div className='grid grid-cols-2 gap-3 md:gap-4'>
+        <div className='bg-white dark:bg-gray-900 p-3 md:p-5 rounded-xl shadow-sm border border-gray-100 dark:border-gray-800 text-center transition-colors'>
           <div className='text-gray-400 dark:text-gray-500 text-xs uppercase mb-1'>總質押借款</div>
-          <div className='text-3xl font-bold text-red-600 dark:text-red-400'>{fm(totalLoan)}</div>
+          <div className='text-xl md:text-3xl font-bold text-red-600 dark:text-red-400'>
+            {fm(totalLoan)}
+          </div>
         </div>
-        <div className='bg-white dark:bg-gray-900 p-5 rounded-xl shadow-sm border border-gray-100 dark:border-gray-800 text-center transition-colors'>
+        <div className='bg-white dark:bg-gray-900 p-3 md:p-5 rounded-xl shadow-sm border border-gray-100 dark:border-gray-800 text-center transition-colors'>
           <div className='text-gray-400 dark:text-gray-500 text-xs uppercase mb-1'>整戶維持率</div>
           <div
-            className={`text-3xl font-bold ${overallRatio < 140 ? 'text-red-600' : overallRatio < 166 ? 'text-yellow-600' : 'text-green-600'} dark:opacity-90`}
+            className={`text-xl md:text-3xl font-bold ${overallRatio < 140 ? 'text-red-600' : overallRatio < 166 ? 'text-yellow-600' : 'text-green-600'} dark:opacity-90`}
           >
             {overallRatio.toFixed(2)}%
           </div>
@@ -91,8 +93,9 @@ const PledgeTab: React.FC<PledgeTabProps> = ({
         </div>
       </div>
 
-      <div className='grid grid-cols-1 lg:grid-cols-3 gap-6'>
-        <div className='lg:col-span-1'>
+      <div className='grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-6'>
+        {/* 手機上先看現有質押，新增表單排在後面 */}
+        <div className='order-2 lg:order-none lg:col-span-1'>
           <div className='bg-white dark:bg-gray-900 p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-800 transition-colors'>
             <h2 className='text-lg font-bold mb-4 flex items-center dark:text-white'>
               <i className='fa-solid fa-hand-holding-dollar text-blue-500 mr-2'></i> 新增質借
@@ -185,8 +188,53 @@ const PledgeTab: React.FC<PledgeTabProps> = ({
           </div>
         </div>
 
-        <div className='lg:col-span-2 bg-white dark:bg-gray-900 rounded-xl shadow-sm border border-gray-100 dark:border-gray-800 overflow-hidden flex flex-col transition-colors'>
-          <div className='overflow-x-auto'>
+        <div className='order-1 lg:order-none lg:col-span-2 bg-white dark:bg-gray-900 rounded-xl shadow-sm border border-gray-100 dark:border-gray-800 overflow-hidden flex flex-col transition-colors'>
+          {/* 手機版：一筆質押一張卡片 */}
+          <div className='md:hidden divide-y divide-gray-100 dark:divide-gray-800'>
+            {pledgeData.map((p, i) => {
+              const qty = adjustedQty(p);
+              const ratio = ((currentPrices[p.symbol] * qty) / p.loanAmount) * 100;
+              return (
+                <div key={p.id ?? i} className='px-4 py-3'>
+                  <div className='flex items-baseline justify-between gap-2'>
+                    <div className='min-w-0'>
+                      <span className='font-bold text-base text-gray-800 dark:text-white'>
+                        {p.symbol}
+                      </span>
+                      <span className='ml-2 text-xs font-mono text-gray-500 dark:text-gray-400'>
+                        {qty.toLocaleString()} 股
+                      </span>
+                      {qty !== p.qty && (
+                        <span className='ml-1 text-[10px] text-purple-500'>(分割後)</span>
+                      )}
+                    </div>
+                    <div
+                      className={`flex-none font-mono font-bold text-base ${ratio < 140 ? 'text-red-600' : 'text-green-600'} dark:opacity-90`}
+                    >
+                      {ratio.toFixed(1)}%
+                    </div>
+                  </div>
+                  <div className='mt-1 flex items-baseline justify-between gap-2 text-xs'>
+                    <span className='text-gray-500 dark:text-gray-400'>
+                      借款{' '}
+                      <span className='font-mono font-bold text-red-600 dark:text-red-400'>
+                        {fm(p.loanAmount)}
+                      </span>
+                    </span>
+                    <span className='text-gray-400 dark:text-gray-500'>維持率</span>
+                  </div>
+                  <div className='mt-1 flex flex-wrap justify-between gap-x-3 text-[11px] text-gray-400 dark:text-gray-500'>
+                    <span>
+                      匯撥 {p.transferDate}・借款 {p.loanDate}
+                    </span>
+                    <span>還款 {p.repaymentDate}</span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          <div className='hidden md:block overflow-x-auto'>
             <table className='w-full text-[11px] text-left text-gray-500 dark:text-gray-400'>
               <thead className='bg-gray-50 dark:bg-gray-800 text-gray-700 dark:text-gray-300 uppercase'>
                 <tr>

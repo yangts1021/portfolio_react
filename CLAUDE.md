@@ -89,6 +89,7 @@ See `pipeline/README.md` for commands and setup detail.
 - Prettier: single quotes, trailing commas, 100 char line width, 2-space indent
 - ESLint extends: eslint:recommended, @typescript-eslint/recommended, react-hooks/recommended, prettier
 - Tailwind CSS via CDN (class-based dark mode with `dark:` prefix)
+- Mobile layout: below the `md` breakpoint the tabs move to a bottom bar (`BottomTabs` in `components/Layout/Navbar.tsx`) and every data table is replaced by a card list — the pattern is a `md:hidden` card list next to a `hidden md:block` table, so a new column must be added to both. `OverviewTab` reorders its sections on phones with `order-*` classes (net worth and P&L first). Inputs are forced to 16px on phones in `index.html` to stop iOS zooming on focus
 - Path alias: `@/` maps to project root
 
 ## Build Configuration
