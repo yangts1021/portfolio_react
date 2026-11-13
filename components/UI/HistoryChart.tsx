@@ -23,13 +23,15 @@ interface HistoryChartProps {
 }
 
 type ChartMode = 'asset' | 'pnl';
-type RangeKey = '3M' | '6M' | '1Y' | 'ALL';
+type RangeKey = '3M' | '6M' | 'YTD' | '1Y' | 'ALL';
 
-const RANGE_DAYS: Record<RangeKey, number> = { '3M': 90, '6M': 182, '1Y': 365, ALL: 0 };
-const RANGES: RangeKey[] = ['3M', '6M', '1Y', 'ALL'];
+// YTD 與「全部」不是固定天數，另外處理
+const RANGE_DAYS: Record<RangeKey, number> = { '3M': 90, '6M': 182, YTD: 0, '1Y': 365, ALL: 0 };
+const RANGES: RangeKey[] = ['3M', '6M', 'YTD', '1Y', 'ALL'];
 const RANGE_LABEL: Record<RangeKey, string> = {
   '3M': '3 個月',
   '6M': '6 個月',
+  YTD: 'YTD',
   '1Y': '1 年',
   ALL: '全部',
 };
@@ -46,15 +48,20 @@ const HistoryChart: React.FC<HistoryChartProps> = ({ history, isDarkMode, hideAm
   const [mode, setMode] = useState<ChartMode>('asset');
   const [range, setRange] = useState<RangeKey>('6M');
 
+  // 今年 1 月 1 日（YYYY-MM-DD），日期字串可以直接比大小
+  const yearStart = `${new Date().getFullYear()}-01-01`;
+
   const data = useMemo(() => {
     const cutoff = RANGE_DAYS[range] === 0 ? 0 : Date.now() - RANGE_DAYS[range] * 86400000;
     return (
       history
-        .filter((p) => new Date(p.date).getTime() >= cutoff)
+        .filter((p) =>
+          range === 'YTD' ? p.date >= yearStart : new Date(p.date).getTime() >= cutoff,
+        )
         // 總損益 = 未實現 + 已實現累計，在圖上額外畫一條
         .map((p) => ({ ...p, total: p.unrealized + p.realized }))
     );
-  }, [history, range]);
+  }, [history, range, yearStart]);
 
   // 區間績效看的是總損益的變化，避免把期間內的加碼算成獲利。
   // 「全部」的基準是 0（開始投資前沒有損益）而不是首日 —— 首日已經帶著
@@ -63,7 +70,18 @@ const HistoryChart: React.FC<HistoryChartProps> = ({ history, isDarkMode, hideAm
   const latest = history[history.length - 1];
   const first = data[0];
   const isAll = range === 'ALL';
-  const baseline = isAll || !first ? 0 : first.unrealized + first.realized;
+  // YTD 的基準是去年最後一個交易日的收盤，這樣今年第一個交易日的漲跌才算得進去；
+  // 歷史從今年才開始的話就跟「全部」一樣以 0 為基準
+  const lastYearEnd =
+    range === 'YTD' ? [...history].reverse().find((p) => p.date < yearStart) : undefined;
+  const baseline =
+    range === 'YTD'
+      ? lastYearEnd
+        ? lastYearEnd.unrealized + lastYearEnd.realized
+        : 0
+      : isAll || !first
+        ? 0
+        : first.unrealized + first.realized;
   const periodGain = latest ? latest.unrealized + latest.realized - baseline : 0;
 
   // 最大回撤跟著所選區間算：區間內最深的一次高點到低點
@@ -105,7 +123,8 @@ const HistoryChart: React.FC<HistoryChartProps> = ({ history, isDarkMode, hideAm
           <div className='text-[11px] text-gray-400 dark:text-gray-500 mt-0.5'>
             {data.length > 0 && `${data[0].date} ~ ${data[data.length - 1].date}`}
             <span className={`ml-2 ${periodGain >= 0 ? 'text-red-500' : 'text-green-500'}`}>
-              {isAll ? '總損益' : '區間損益'} {periodGain >= 0 ? '+' : ''}
+              {isAll ? '總損益' : range === 'YTD' ? '今年損益' : '區間損益'}{' '}
+              {periodGain >= 0 ? '+' : ''}
               {fmtValue(periodGain)}
             </span>
           </div>
@@ -131,13 +150,13 @@ const HistoryChart: React.FC<HistoryChartProps> = ({ history, isDarkMode, hideAm
             </div>
           )}
         </div>
-        <div className='flex items-center gap-2'>
+        <div className='flex flex-wrap items-center gap-2'>
           <div className='flex rounded-md overflow-hidden border border-gray-200 dark:border-gray-700'>
             {(['asset', 'pnl'] as ChartMode[]).map((m) => (
               <button
                 key={m}
                 onClick={() => setMode(m)}
-                className={`px-3 py-1 text-xs transition-colors ${
+                className={`px-2.5 md:px-3 py-1.5 md:py-1 text-xs whitespace-nowrap transition-colors ${
                   mode === m
                     ? 'bg-blue-600 text-white'
                     : 'bg-white dark:bg-gray-900 text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800'
@@ -152,7 +171,7 @@ const HistoryChart: React.FC<HistoryChartProps> = ({ history, isDarkMode, hideAm
               <button
                 key={r}
                 onClick={() => setRange(r)}
-                className={`px-2.5 py-1 text-xs transition-colors ${
+                className={`px-2 md:px-2.5 py-1.5 md:py-1 text-xs whitespace-nowrap transition-colors ${
                   range === r
                     ? 'bg-gray-700 dark:bg-gray-600 text-white'
                     : 'bg-white dark:bg-gray-900 text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800'
