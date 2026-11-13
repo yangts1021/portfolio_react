@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import {
   Area,
-  AreaChart,
+  ComposedChart,
   CartesianGrid,
   Legend,
   Line,
@@ -187,7 +187,8 @@ const HistoryChart: React.FC<HistoryChartProps> = ({ history, isDarkMode, hideAm
       <div className='p-4' style={{ height: 320 }}>
         <ResponsiveContainer width='100%' height='100%'>
           {mode === 'asset' ? (
-            <AreaChart data={data} margin={{ top: 8, right: 8, bottom: 0, left: 8 }}>
+            // AreaChart 不會畫 Line 子元件，總成本那條線會消失；面積加折線要用 ComposedChart
+            <ComposedChart data={data} margin={{ top: 8, right: 8, bottom: 0, left: 8 }}>
               <defs>
                 <linearGradient id='mvFill' x1='0' y1='0' x2='0' y2='1'>
                   <stop offset='0%' stopColor='#3b82f6' stopOpacity={0.35} />
@@ -234,7 +235,7 @@ const HistoryChart: React.FC<HistoryChartProps> = ({ history, isDarkMode, hideAm
                 strokeWidth={1.5}
                 dot={false}
               />
-            </AreaChart>
+            </ComposedChart>
           ) : (
             <LineChart data={data} margin={{ top: 8, right: 8, bottom: 0, left: 8 }}>
               <CartesianGrid stroke={grid} vertical={false} />
