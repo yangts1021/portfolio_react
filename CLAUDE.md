@@ -31,7 +31,7 @@ React 18 + TypeScript SPA for investment portfolio tracking. UI is in Traditiona
 **Key modules:**
 
 - `utils/calculations.ts` — `calculatePortfolio()` is the core function: processes transactions chronologically, computes average cost, inventory, realized/unrealized P&L, converts to TWD via exchange rates. Also has `getCategoryFromBeta()` for risk categorization and `formatMoney()` for number display.
-- `utils/marketData.ts` — quote source labels and market-hours helpers used by the 60s polling effect in `App.tsx` (quotes themselves come from Supabase `quotes`, written by the pipeline).
+- `utils/marketData.ts` — quote source labels and market-hours helpers used by the 60s polling effect in `App.tsx` (quotes themselves come from Supabase `quotes`, written by the pipeline). `summarizeQuoteFreshness()` drives the freshness banner at the top of `OverviewTab`: it judges by the oldest `quotes.fetched_at` (pipeline write time, not the exchange's `quote_ts`) among TWD/USD holdings — live ≤ 6 min, delayed ≤ 15 min, stale beyond that while a market is open.
 - `types.ts` — All shared TypeScript interfaces (`Book`, `Transaction`, `BankAccount`, `PledgeRecord`, `PortfolioItem`, `SplitEvent`, currency/action union types)
 - `constants.ts` — localStorage key names (plus legacy Sheet-era keys removed on startup)
 

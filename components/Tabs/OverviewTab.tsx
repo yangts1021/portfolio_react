@@ -18,7 +18,13 @@ import {
   formatMoney,
   getColorClass,
 } from '../../utils/calculations';
-import { PriceQuoteMeta, quoteSourceLabel } from '../../utils/marketData';
+import {
+  PriceQuoteMeta,
+  QuoteFreshnessLevel,
+  formatAge,
+  quoteSourceLabel,
+  summarizeQuoteFreshness,
+} from '../../utils/marketData';
 
 interface OverviewTabProps {
   transactions: Transaction[];
@@ -64,6 +70,109 @@ const QuoteSourceTag: React.FC<{ meta?: PriceQuoteMeta }> = ({ meta }) => {
     >
       {quoteSourceLabel(meta.source)}
       {clock && ` ${clock}`}
+    </div>
+  );
+};
+
+// 新鮮度橫幅的樣式與標題
+const FRESHNESS_STYLE: Record<QuoteFreshnessLevel, { box: string; dot: string; label: string }> = {
+  live: {
+    box: 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300',
+    dot: 'bg-emerald-500 animate-pulse',
+    label: '報價即時',
+  },
+  delayed: {
+    box: 'bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-300',
+    dot: 'bg-amber-500',
+    label: '報價延遲',
+  },
+  stale: {
+    box: 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800 text-red-800 dark:text-red-300',
+    dot: 'bg-red-500',
+    label: '報價過舊',
+  },
+  closed: {
+    box: 'bg-gray-50 dark:bg-gray-800/50 border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300',
+    dot: 'bg-gray-400',
+    label: '休市中',
+  },
+  unknown: {
+    box: 'bg-gray-50 dark:bg-gray-800/50 border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300',
+    dot: 'bg-gray-400',
+    label: '尚無報價時間',
+  },
+};
+
+// 總覽頂端的報價新鮮度：損益是不是當下的數字，一眼看得出來
+const QuoteFreshnessBar: React.FC<{
+  holdings: { symbol: string; currency: string }[];
+  meta: Record<string, PriceQuoteMeta>;
+}> = ({ holdings, meta }) => {
+  // 「幾分鐘前」要自己走，不能等下一次報價進來才重算
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const id = setInterval(() => setNow(new Date()), 30000);
+    return () => clearInterval(id);
+  }, []);
+
+  if (holdings.length === 0) return null;
+  const f = summarizeQuoteFreshness(holdings, meta, now);
+  const style = FRESHNESS_STYLE[f.level];
+
+  const sameDay = f.updatedAt && f.updatedAt.toDateString() === now.toDateString();
+  const clock = f.updatedAt
+    ? f.updatedAt.toLocaleString('zh-TW', {
+        ...(sameDay ? {} : { month: 'numeric', day: 'numeric' }),
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false,
+      })
+    : '';
+
+  const notes: { text: string; title: string }[] = [];
+  if (f.cacheSymbols.length > 0) {
+    notes.push({
+      text: `${f.cacheSymbols.length} 檔用快取價`,
+      title: `這一輪抓不到新價格，沿用最後已知價：${f.cacheSymbols.join('、')}`,
+    });
+  }
+  if (f.missingSymbols.length > 0) {
+    notes.push({
+      text: `${f.missingSymbols.length} 檔沒有報價`,
+      title: `還沒有報價紀錄：${f.missingSymbols.join('、')}`,
+    });
+  }
+  if (f.manualSymbols.length > 0) {
+    notes.push({
+      text: `${f.manualSymbols.length} 檔不自動更新`,
+      title: `港幣、日圓標的不會自動抓價：${f.manualSymbols.join('、')}`,
+    });
+  }
+
+  return (
+    <div
+      className={`flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-2 rounded-xl border text-xs transition-colors ${style.box}`}
+      title={
+        f.updatedAt
+          ? `最舊一筆報價寫入於 ${f.updatedAt.toLocaleString('zh-TW', { hour12: false })}`
+          : undefined
+      }
+    >
+      <span className='flex items-center font-bold'>
+        <span className={`inline-block w-2 h-2 rounded-full mr-2 ${style.dot}`}></span>
+        {style.label}
+      </span>
+      {f.updatedAt && f.ageMinutes !== null && (
+        <span>
+          更新於 {clock}（{formatAge(f.ageMinutes)}）
+        </span>
+      )}
+      {f.level === 'stale' && <span>抓價程式可能沒有在執行，損益不是當下的數字</span>}
+      {notes.map((n) => (
+        <span key={n.text} title={n.title} className='underline decoration-dotted cursor-help'>
+          {n.text}
+        </span>
+      ))}
     </div>
   );
 };
@@ -237,6 +346,8 @@ const OverviewTab: React.FC<OverviewTabProps> = (props) => {
 
   return (
     <div className='animate-fade-in space-y-6'>
+      <QuoteFreshnessBar holdings={metrics.activeItems} meta={props.priceMeta} />
+
       <div className='grid grid-cols-1 md:grid-cols-2 gap-4'>
         {/* 現金 & 匯率卡片 */}
         <div className='bg-white dark:bg-gray-900 p-4 rounded-xl shadow-sm border border-gray-100 dark:border-gray-800 transition-colors'>
