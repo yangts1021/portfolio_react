@@ -6,6 +6,7 @@ import {
   Legend,
   Line,
   LineChart,
+  ReferenceArea,
   ReferenceLine,
   ResponsiveContainer,
   Tooltip,
@@ -13,7 +14,7 @@ import {
   YAxis,
 } from 'recharts';
 import { HistoryPoint } from '../../types';
-import { formatMoney } from '../../utils/calculations';
+import { calculateMaxDrawdown, formatMoney } from '../../utils/calculations';
 
 interface HistoryChartProps {
   history: HistoryPoint[];
@@ -65,6 +66,20 @@ const HistoryChart: React.FC<HistoryChartProps> = ({ history, isDarkMode, hideAm
   const baseline = isAll || !first ? 0 : first.unrealized + first.realized;
   const periodGain = latest ? latest.unrealized + latest.realized - baseline : 0;
 
+  // 最大回撤跟著所選區間算：區間內最深的一次高點到低點
+  const maxDrawdown = useMemo(() => calculateMaxDrawdown(data), [data]);
+  // 圖上把那一段標出來
+  const drawdownArea = maxDrawdown && (
+    <ReferenceArea
+      x1={maxDrawdown.peakDate}
+      x2={maxDrawdown.troughDate}
+      fill='#22c55e'
+      fillOpacity={isDarkMode ? 0.12 : 0.1}
+      strokeOpacity={0}
+      ifOverflow='visible'
+    />
+  );
+
   const axis = isDarkMode ? '#6b7280' : '#9ca3af';
   const grid = isDarkMode ? '#1f2937' : '#f3f4f6';
   const fmtValue = (v: number) =>
@@ -94,6 +109,27 @@ const HistoryChart: React.FC<HistoryChartProps> = ({ history, isDarkMode, hideAm
               {fmtValue(periodGain)}
             </span>
           </div>
+          {data.length > 1 && (
+            <div
+              className='text-[11px] text-gray-400 dark:text-gray-500 mt-0.5'
+              title='所選區間內，報酬從高點到低點的最大跌幅。已排除加碼與賣出造成的市值變化；圖上的綠色區段就是這一段'
+            >
+              最大回撤{' '}
+              {maxDrawdown ? (
+                <>
+                  <span className='font-bold text-green-500'>
+                    {maxDrawdown.pct.toFixed(2)}%
+                    {!hideAmounts && `（${fmtValue(maxDrawdown.amount)}）`}
+                  </span>
+                  <span className='ml-2'>
+                    {fmtDate(maxDrawdown.peakDate)} → {fmtDate(maxDrawdown.troughDate)}
+                  </span>
+                </>
+              ) : (
+                <span className='font-bold'>0%</span>
+              )}
+            </div>
+          )}
         </div>
         <div className='flex items-center gap-2'>
           <div className='flex rounded-md overflow-hidden border border-gray-200 dark:border-gray-700'>
@@ -162,6 +198,7 @@ const HistoryChart: React.FC<HistoryChartProps> = ({ history, isDarkMode, hideAm
                 }}
               />
               <Legend wrapperStyle={{ fontSize: 11 }} />
+              {drawdownArea}
               <Area
                 type='monotone'
                 dataKey='marketValue'
@@ -204,6 +241,7 @@ const HistoryChart: React.FC<HistoryChartProps> = ({ history, isDarkMode, hideAm
                 }}
               />
               <Legend wrapperStyle={{ fontSize: 11 }} />
+              {drawdownArea}
               <ReferenceLine y={0} stroke={axis} strokeDasharray='3 3' />
               {/* 總損益是主角，畫粗一點；未實現與已實現退為細線 */}
               <Line

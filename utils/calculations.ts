@@ -194,3 +194,50 @@ export const calculatePortfolio = (
 
   return items;
 };
+
+// --------------------------------------------------------------------------- //
+// 最大回撤
+// --------------------------------------------------------------------------- //
+
+export interface MaxDrawdown {
+  pct: number; // 負值，例如 -12.3 代表從高點跌了 12.3%
+  amount: number; // 高點到低點之間總損益的變化（TWD，負值）
+  peakDate: string;
+  troughDate: string;
+}
+
+// 直接拿市值算回撤會被加碼、賣出扭曲（賣股換現金市值會掉，但沒有虧損），
+// 所以先用「當日總損益變化 ÷ 前一日市值」串成報酬指數，再在指數上找最大的高點到低點跌幅。
+// 當日的買賣視為收盤後才發生，是近似值。沒有回撤（一路上漲）時回傳 null。
+export const calculateMaxDrawdown = (
+  points: { date: string; marketValue: number; unrealized: number; realized: number }[],
+): MaxDrawdown | null => {
+  if (points.length < 2) return null;
+  const total = (i: number) => points[i].unrealized + points[i].realized;
+
+  let index = 1;
+  let peakIndex = 1;
+  let peakAt = 0;
+  let worst = 0;
+  let result: MaxDrawdown | null = null;
+
+  for (let i = 1; i < points.length; i++) {
+    const base = points[i - 1].marketValue;
+    if (base > 0) index *= 1 + (total(i) - total(i - 1)) / base;
+    if (index > peakIndex) {
+      peakIndex = index;
+      peakAt = i;
+    }
+    const drawdown = index / peakIndex - 1;
+    if (drawdown < worst) {
+      worst = drawdown;
+      result = {
+        pct: drawdown * 100,
+        amount: total(i) - total(peakAt),
+        peakDate: points[peakAt].date,
+        troughDate: points[i].date,
+      };
+    }
+  }
+  return result;
+};
