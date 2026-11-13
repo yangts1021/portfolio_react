@@ -24,6 +24,14 @@ const autoNote = (b: BankAccount): string => {
 };
 import { formatMoney } from '../../utils/calculations';
 
+type BankField = 'usd' | 'twd' | 'loan';
+
+const FIELDS: { key: BankField; label: string }[] = [
+  { key: 'usd', label: 'USD' },
+  { key: 'twd', label: 'TWD' },
+  { key: 'loan', label: '貸款 (TWD)' },
+];
+
 interface BankTabProps {
   bankData: BankAccount[];
   exchangeRates: ExchangeRates;
@@ -39,7 +47,7 @@ const BankTab: React.FC<BankTabProps> = ({ bankData, onSave, onRefresh, hideAmou
   const totalUSD = bankData.reduce((sum, b) => sum + (b.usd || 0), 0);
   const totalTWD = bankData.reduce((sum, b) => sum + (b.twd || 0), 0);
 
-  const handleUpdate = (bank: string, field: 'usd' | 'twd' | 'loan', rawValue: string) => {
+  const handleUpdate = (bank: string, field: BankField, rawValue: string) => {
     const current = bankData.find((b) => b.bank === bank);
     if (!current) return;
     // 隱藏金額時欄位顯示 ••••，解析不出數字就不存，避免被當成 0 寫回雲端
@@ -48,24 +56,50 @@ const BankTab: React.FC<BankTabProps> = ({ bankData, onSave, onRefresh, hideAmou
     onSave({ ...current, [field]: val });
   };
 
+  // 餘額輸入框：聚焦時去掉千分位方便編輯，失焦時存檔並還原格式。桌機表格與手機卡片共用
+  const moneyInput = (b: BankAccount, field: BankField) => (
+    <input
+      type='text'
+      inputMode='decimal'
+      key={`${b.bank}-${field}-${b[field]}`}
+      readOnly={hideAmounts}
+      defaultValue={fm(b[field])}
+      aria-label={`${b.bank} ${FIELDS.find((f) => f.key === field)?.label}`}
+      onFocus={(e) => {
+        e.target.value = e.target.value.replace(/,/g, '');
+      }}
+      onBlur={(e) => {
+        handleUpdate(b.bank, field, e.target.value);
+        if (!hideAmounts) {
+          e.target.value = formatMoney(parseFloat(e.target.value.replace(/,/g, '')) || 0);
+        }
+      }}
+      className={`w-full text-right bg-transparent hover:bg-gray-100 dark:hover:bg-gray-800 focus:bg-white dark:focus:bg-gray-700 focus:ring-1 rounded p-1 font-mono outline-none ${
+        field === 'loan'
+          ? 'focus:ring-red-500 text-red-500 dark:text-red-400'
+          : 'focus:ring-blue-500 dark:text-gray-200'
+      }`}
+    />
+  );
+
   return (
-    <div className='animate-fade-in space-y-6'>
-      <div className='grid grid-cols-1 md:grid-cols-2 gap-4'>
+    <div className='animate-fade-in space-y-4 md:space-y-6'>
+      <div className='grid grid-cols-2 gap-3 md:gap-4'>
         {/* 上方總額摘要卡片 - USD 總額 */}
-        <div className='bg-white dark:bg-gray-900 p-5 rounded-xl shadow-sm border border-gray-100 dark:border-gray-800 flex flex-col items-center justify-center text-center transition-colors'>
+        <div className='bg-white dark:bg-gray-900 p-3 md:p-5 rounded-xl shadow-sm border border-gray-100 dark:border-gray-800 flex flex-col items-center justify-center text-center transition-colors'>
           <div className='text-gray-400 dark:text-gray-500 text-xs font-medium uppercase tracking-wider mb-1'>
             銀行總餘額 (USD)
           </div>
-          <div className='text-3xl font-bold text-gray-800 dark:text-white'>
+          <div className='text-xl md:text-3xl font-bold text-gray-800 dark:text-white'>
             {fm(totalUSD, { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
           </div>
         </div>
         {/* 上方總額摘要卡片 - TWD 總額 */}
-        <div className='bg-white dark:bg-gray-900 p-5 rounded-xl shadow-sm border border-gray-100 dark:border-gray-800 flex flex-col items-center justify-center text-center transition-colors'>
+        <div className='bg-white dark:bg-gray-900 p-3 md:p-5 rounded-xl shadow-sm border border-gray-100 dark:border-gray-800 flex flex-col items-center justify-center text-center transition-colors'>
           <div className='text-gray-400 dark:text-gray-500 text-xs font-medium uppercase tracking-wider mb-1'>
             銀行總餘額 (TWD)
           </div>
-          <div className='text-3xl font-bold text-gray-800 dark:text-white'>
+          <div className='text-xl md:text-3xl font-bold text-gray-800 dark:text-white'>
             {fm(totalTWD, { maximumFractionDigits: 0 })}
           </div>
         </div>
@@ -83,7 +117,40 @@ const BankTab: React.FC<BankTabProps> = ({ bankData, onSave, onRefresh, hideAmou
             <i className='fa-solid fa-rotate mr-1'></i> 刷新
           </button>
         </div>
-        <div className='overflow-x-auto'>
+        {/* 手機版：一家銀行一張卡片，四欄表格會把金額切到看不見 */}
+        <div className='md:hidden divide-y divide-gray-100 dark:divide-gray-800'>
+          {bankData.map((b) => (
+            <div
+              key={b.bank}
+              className={`px-4 py-3 ${b.autoSource ? 'bg-sky-50 dark:bg-sky-950/40' : ''}`}
+            >
+              <div className='font-bold text-gray-800 dark:text-white'>{b.bank}</div>
+              {b.autoSource && (
+                <div className='text-[11px] text-sky-600 dark:text-sky-400 mt-0.5'>
+                  <i className='fa-solid fa-rotate mr-1'></i>
+                  {autoNote(b)}
+                </div>
+              )}
+              <div className='mt-2 space-y-1'>
+                {FIELDS.map((f) => (
+                  <label key={f.key} className='flex items-center gap-3 text-xs'>
+                    <span className='flex-none w-20 text-gray-500 dark:text-gray-400'>
+                      {f.label}
+                    </span>
+                    {moneyInput(b, f.key)}
+                  </label>
+                ))}
+              </div>
+            </div>
+          ))}
+          {bankData.length === 0 && (
+            <div className='p-10 text-center text-gray-400 dark:text-gray-600'>
+              目前沒有銀行資料
+            </div>
+          )}
+        </div>
+
+        <div className='hidden md:block overflow-x-auto'>
           <table className='w-full text-sm text-left text-gray-500 dark:text-gray-400'>
             <thead className='text-xs text-gray-700 dark:text-gray-300 uppercase bg-gray-50 dark:bg-gray-800'>
               <tr>
@@ -112,66 +179,11 @@ const BankTab: React.FC<BankTabProps> = ({ bankData, onSave, onRefresh, hideAmou
                       </span>
                     )}
                   </td>
-                  <td className='px-6 py-4'>
-                    <input
-                      type='text'
-                      key={`${b.bank}-usd-${b.usd}`}
-                      readOnly={hideAmounts}
-                      defaultValue={fm(b.usd)}
-                      onFocus={(e) => {
-                        e.target.value = e.target.value.replace(/,/g, '');
-                      }}
-                      onBlur={(e) => {
-                        handleUpdate(b.bank, 'usd', e.target.value);
-                        if (!hideAmounts) {
-                          e.target.value = formatMoney(
-                            parseFloat(e.target.value.replace(/,/g, '')) || 0,
-                          );
-                        }
-                      }}
-                      className='w-full text-right bg-transparent hover:bg-gray-100 dark:hover:bg-gray-800 focus:bg-white dark:focus:bg-gray-700 focus:ring-1 focus:ring-blue-500 rounded p-1 font-mono outline-none dark:text-gray-200'
-                    />
-                  </td>
-                  <td className='px-6 py-4'>
-                    <input
-                      type='text'
-                      key={`${b.bank}-twd-${b.twd}`}
-                      readOnly={hideAmounts}
-                      defaultValue={fm(b.twd)}
-                      onFocus={(e) => {
-                        e.target.value = e.target.value.replace(/,/g, '');
-                      }}
-                      onBlur={(e) => {
-                        handleUpdate(b.bank, 'twd', e.target.value);
-                        if (!hideAmounts) {
-                          e.target.value = formatMoney(
-                            parseFloat(e.target.value.replace(/,/g, '')) || 0,
-                          );
-                        }
-                      }}
-                      className='w-full text-right bg-transparent hover:bg-gray-100 dark:hover:bg-gray-800 focus:bg-white dark:focus:bg-gray-700 focus:ring-1 focus:ring-blue-500 rounded p-1 font-mono outline-none dark:text-gray-200'
-                    />
-                  </td>
-                  <td className='px-6 py-4'>
-                    <input
-                      type='text'
-                      key={`${b.bank}-loan-${b.loan}`}
-                      readOnly={hideAmounts}
-                      defaultValue={fm(b.loan)}
-                      onFocus={(e) => {
-                        e.target.value = e.target.value.replace(/,/g, '');
-                      }}
-                      onBlur={(e) => {
-                        handleUpdate(b.bank, 'loan', e.target.value);
-                        if (!hideAmounts) {
-                          e.target.value = formatMoney(
-                            parseFloat(e.target.value.replace(/,/g, '')) || 0,
-                          );
-                        }
-                      }}
-                      className='w-full text-right bg-transparent hover:bg-gray-100 dark:hover:bg-gray-800 focus:bg-white dark:focus:bg-gray-700 focus:ring-1 focus:ring-red-500 rounded p-1 font-mono text-red-500 dark:text-red-400 outline-none'
-                    />
-                  </td>
+                  {FIELDS.map((f) => (
+                    <td key={f.key} className='px-6 py-4'>
+                      {moneyInput(b, f.key)}
+                    </td>
+                  ))}
                 </tr>
               ))}
               {bankData.length === 0 && (

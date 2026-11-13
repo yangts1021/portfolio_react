@@ -14,7 +14,7 @@ import { STORAGE_KEYS, LEGACY_STORAGE_KEYS } from './constants';
 import { isMarketHours, PriceQuoteMeta } from './utils/marketData';
 import { supabase } from './utils/supabase';
 import * as db from './utils/db';
-import Navbar from './components/Layout/Navbar';
+import Navbar, { BottomTabs } from './components/Layout/Navbar';
 import TransactionsTab from './components/Tabs/TransactionsTab';
 import OverviewTab from './components/Tabs/OverviewTab';
 import BankTab from './components/Tabs/BankTab';
@@ -128,7 +128,7 @@ interface PortfolioAppProps {
 }
 
 const PortfolioApp: React.FC<PortfolioAppProps> = ({ isDarkMode, setIsDarkMode, onSignOut }) => {
-  const [activeTab, setActiveTab] = useState<TabType>('transactions');
+  const [activeTab, setActiveTab] = useState<TabType>('overview');
 
   const [hideAmounts, setHideAmounts] = useState<boolean>(
     () => localStorage.getItem('hideAmounts') === 'true',
@@ -447,7 +447,7 @@ const PortfolioApp: React.FC<PortfolioAppProps> = ({ isDarkMode, setIsDarkMode, 
   );
 
   return (
-    <div className='flex flex-col h-screen overflow-hidden bg-gray-50 dark:bg-gray-950 transition-colors duration-300'>
+    <div className='app-shell flex flex-col overflow-hidden bg-gray-50 dark:bg-gray-950 transition-colors duration-300'>
       <Navbar
         activeTab={activeTab}
         setActiveTab={setActiveTab}
@@ -463,8 +463,8 @@ const PortfolioApp: React.FC<PortfolioAppProps> = ({ isDarkMode, setIsDarkMode, 
         onSignOut={onSignOut}
       />
 
-      <main className='flex-1 overflow-y-auto p-4 sm:p-6'>
-        <div className='max-w-7xl mx-auto space-y-6'>
+      <main className='flex-1 overflow-y-auto p-3 sm:p-6'>
+        <div className='max-w-7xl mx-auto space-y-4 md:space-y-6'>
           {activeTab === 'transactions' && (
             <TransactionsTab
               transactions={transactions}
@@ -517,9 +517,12 @@ const PortfolioApp: React.FC<PortfolioAppProps> = ({ isDarkMode, setIsDarkMode, 
         </div>
       </main>
 
+      <BottomTabs activeTab={activeTab} setActiveTab={setActiveTab} />
+
       <AlertModal config={alertConfig} onClose={() => setAlertConfig(null)} />
 
-      <div className='fixed bottom-5 right-5 z-50 flex flex-col gap-2'>
+      {/* 手機上要讓出底部分頁列的高度 */}
+      <div className='fixed bottom-20 md:bottom-5 right-3 md:right-5 z-50 flex flex-col gap-2'>
         {toasts.map((toast, i) => (
           <div
             key={i}

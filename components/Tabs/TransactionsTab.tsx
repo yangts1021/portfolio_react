@@ -141,7 +141,7 @@ const TransactionsTab: React.FC<TransactionsTabProps> = ({
   };
 
   return (
-    <div className='grid grid-cols-1 lg:grid-cols-3 gap-6 animate-fade-in'>
+    <div className='grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-6 animate-fade-in'>
       <div className='lg:col-span-1'>
         <div className='sticky top-6 space-y-6'>
           <div className='bg-white dark:bg-gray-900 rounded-xl shadow-sm p-6 border border-gray-100 dark:border-gray-800'>
@@ -271,7 +271,7 @@ const TransactionsTab: React.FC<TransactionsTabProps> = ({
               原始交易紀錄不變，自生效日起持股與均價依比例調整
             </p>
             <form onSubmit={handleSplitSubmit} className='space-y-3'>
-              <div className='grid grid-cols-3 gap-3'>
+              <div className='grid grid-cols-2 md:grid-cols-3 gap-3'>
                 <div>
                   <label className='block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1'>
                     代碼
@@ -285,7 +285,8 @@ const TransactionsTab: React.FC<TransactionsTabProps> = ({
                     className='uppercase w-full bg-gray-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg p-2.5 text-sm dark:text-white'
                   />
                 </div>
-                <div>
+                {/* 手機上日期欄獨占一行，三欄並排會把日期切掉 */}
+                <div className='col-span-2 order-last md:col-span-1 md:order-none'>
                   <label className='block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1'>
                     生效日
                   </label>
@@ -344,7 +345,8 @@ const TransactionsTab: React.FC<TransactionsTabProps> = ({
                       </span>
                       <button
                         onClick={() => deleteSplit(s)}
-                        className='text-gray-400 hover:text-red-500'
+                        aria-label={`刪除 ${s.symbol} 的分割事件`}
+                        className='w-8 h-8 -my-1 -mr-2 text-gray-400 hover:text-red-500'
                       >
                         <i className='fa-solid fa-trash-can'></i>
                       </button>
@@ -364,8 +366,52 @@ const TransactionsTab: React.FC<TransactionsTabProps> = ({
               {transactions.length} 筆
             </span>
           </div>
+          {/* 手機版：一筆交易兩行，七欄的表格在窄螢幕上會被切掉 */}
+          <div className='md:hidden divide-y divide-gray-100 dark:divide-gray-800'>
+            {displayTransactions.map((tx) => (
+              <div key={tx.id} className='flex items-center gap-3 pl-4 pr-1 py-3'>
+                <div className='flex-1 min-w-0'>
+                  <div className='flex items-baseline justify-between gap-2'>
+                    <div className='min-w-0 flex items-center gap-1.5'>
+                      <span
+                        className={`${tx.action === 'BUY' ? 'bg-red-600' : 'bg-green-600'} flex-none text-white px-1.5 py-0.5 rounded text-[10px] font-bold`}
+                      >
+                        {tx.action === 'BUY' ? '買入' : '賣出'}
+                      </span>
+                      <span className='font-bold text-base text-blue-600 dark:text-blue-400 truncate'>
+                        {tx.symbol}
+                      </span>
+                      <span className='text-[10px] text-gray-400 dark:text-gray-500 truncate'>
+                        {tx.broker}
+                      </span>
+                    </div>
+                    <div className='flex-none font-mono font-bold text-sm text-gray-800 dark:text-gray-100'>
+                      {(tx.qty * tx.price).toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                    </div>
+                  </div>
+                  <div className='mt-1 flex items-baseline justify-between gap-2 text-xs text-gray-500 dark:text-gray-400'>
+                    <span>{tx.date}</span>
+                    <span className='font-mono'>
+                      {tx.qty.toLocaleString()} 股 @ {tx.price.toLocaleString()}{' '}
+                      <span className='text-[10px] text-gray-400 dark:text-gray-500'>
+                        {tx.currency}
+                      </span>
+                    </span>
+                  </div>
+                </div>
+                <button
+                  onClick={() => deleteTx(tx)}
+                  aria-label={`刪除 ${tx.date} ${tx.symbol} 的交易`}
+                  className='flex-none w-10 h-10 text-gray-400 active:text-red-500'
+                >
+                  <i className='fa-solid fa-trash-can'></i>
+                </button>
+              </div>
+            ))}
+          </div>
+
           <div className='overflow-x-auto flex-1'>
-            <table className='w-full text-sm text-left text-gray-500 dark:text-gray-400'>
+            <table className='hidden md:table w-full text-sm text-left text-gray-500 dark:text-gray-400'>
               <thead className='text-xs text-gray-700 dark:text-gray-300 uppercase bg-gray-50 dark:bg-gray-800 sticky top-0 shadow-sm z-10'>
                 <tr>
                   <th className='px-4 py-3'>日期</th>
