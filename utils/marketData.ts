@@ -4,6 +4,7 @@
 // 每檔報價的出處，持倉明細用來標示來源與報價時間
 export interface PriceQuoteMeta {
   source: string; // fubon / twse_mis / yfinance / cache
+  prevClose?: number; // 前一交易日收盤，今日損益的基準
   quoteTs?: string; // 交易所產生這個價格的時間
   fetchedAt?: string; // pipeline 這一輪寫入的時間；判斷抓價程式是否還在跑要看這個
 }
@@ -124,4 +125,106 @@ export const formatAge = (minutes: number): string => {
   if (minutes < 60) return `${Math.floor(minutes)} 分鐘前`;
   if (minutes < 60 * 24) return `${Math.floor(minutes / 60)} 小時前`;
   return `${Math.floor(minutes / (60 * 24))} 天前`;
+};
+
+// --------------------------------------------------------------------------- //
+// 今日損益
+// --------------------------------------------------------------------------- //
+
+// 報價所屬的交易日（YYYY-MM-DD，市場當地日期）。
+// 不能直接拿報價時間的日期：美股報價在台北白天也會被重抓，時間是「現在」，
+// 但價格其實是前一個交易時段的收盤。開盤前與週末一律往回推到最近一個交易日（不含國定假日）。
+export const quoteSessionDate = (ts: string | Date, currency: string): string | null => {
+  const at = new Date(ts);
+  if (isNaN(at.getTime())) return null;
+  const us = currency === 'USD';
+  const local = new Date(
+    at.toLocaleString('en-US', { timeZone: us ? 'America/New_York' : 'Asia/Taipei' }),
+  );
+  const openMinutes = us ? 9 * 60 + 30 : 9 * 60;
+  if (local.getHours() * 60 + local.getMinutes() < openMinutes) {
+    local.setDate(local.getDate() - 1);
+  }
+  while (local.getDay() === 0 || local.getDay() === 6) local.setDate(local.getDate() - 1);
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${local.getFullYear()}-${pad(local.getMonth() + 1)}-${pad(local.getDate())}`;
+};
+
+export interface DayPnL {
+  pnl: number; // 原幣
+  pnlTWD: number;
+  baseTWD: number; // 今天的起算金額：開盤前持股以昨收計 + 今天買進的成本
+  pct: number | null; // pnl / base
+}
+
+export interface DayPnLSummary {
+  bySymbol: Record<string, DayPnL>;
+  totalTWD: number;
+  pct: number | null;
+  missingSymbols: string[]; // 沒有昨收，算不出今日損益
+}
+
+// 今日損益 = 現有市值 − 開盤前持股×昨收 − 今天買進成本 + 今天賣出所得。
+// 只用「現價 − 昨收」乘上現有股數的話，今天才買的部位會被多算一段昨收到買價的假損益。
+export const calculateDayPnL = (
+  holdings: { symbol: string; currency: string; inventory: number; currentPrice: number }[],
+  transactions: {
+    symbol: string;
+    date: string;
+    action: string;
+    qty: number;
+    price: number;
+  }[],
+  meta: Record<string, PriceQuoteMeta>,
+  rates: Record<string, number>,
+): DayPnLSummary => {
+  const bySymbol: Record<string, DayPnL> = {};
+  const missingSymbols: string[] = [];
+  let totalTWD = 0;
+  let baseTotalTWD = 0;
+
+  holdings.forEach((h) => {
+    const m = meta[h.symbol];
+    const prev = m?.prevClose;
+    if (!prev || !(prev > 0) || !(h.currentPrice > 0)) {
+      missingSymbols.push(h.symbol);
+      return;
+    }
+    const session = quoteSessionDate(m.fetchedAt || m.quoteTs || '', h.currency);
+    let boughtQty = 0;
+    let boughtCost = 0;
+    let soldQty = 0;
+    let soldProceeds = 0;
+    if (session) {
+      transactions.forEach((tx) => {
+        if (String(tx.symbol).toUpperCase() !== h.symbol || tx.date !== session) return;
+        if (tx.action === 'BUY') {
+          boughtQty += tx.qty;
+          boughtCost += tx.qty * tx.price;
+        } else {
+          soldQty += tx.qty;
+          soldProceeds += tx.qty * tx.price;
+        }
+      });
+    }
+    const heldAtOpen = Math.max(0, h.inventory - boughtQty + soldQty);
+    const base = heldAtOpen * prev + boughtCost;
+    const pnl = h.inventory * h.currentPrice + soldProceeds - base;
+    const rate = rates[h.currency] || 1;
+    bySymbol[h.symbol] = {
+      pnl,
+      pnlTWD: pnl * rate,
+      baseTWD: base * rate,
+      pct: base > 0 ? (pnl / base) * 100 : null,
+    };
+    totalTWD += pnl * rate;
+    baseTotalTWD += base * rate;
+  });
+
+  return {
+    bySymbol,
+    totalTWD,
+    pct: baseTotalTWD > 0 ? (totalTWD / baseTotalTWD) * 100 : null,
+    missingSymbols,
+  };
 };

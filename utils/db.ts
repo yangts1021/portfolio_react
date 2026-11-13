@@ -164,7 +164,7 @@ export async function loadQuotes(symbols: string[]): Promise<QuoteResult> {
   if (symbols.length === 0) return { prices, meta };
   const { data, error } = await supabase
     .from('quotes')
-    .select('symbol, price, source, quote_ts, fetched_at')
+    .select('symbol, price, prev_close, source, quote_ts, fetched_at')
     .in('symbol', symbols);
   fail('讀取報價', error);
   (data ?? []).forEach((q) => {
@@ -172,6 +172,8 @@ export async function loadQuotes(symbols: string[]): Promise<QuoteResult> {
     prices[sym] = num(q.price);
     meta[sym] = {
       source: String(q.source),
+      prevClose:
+        q.prev_close === null || q.prev_close === undefined ? undefined : num(q.prev_close),
       quoteTs: q.quote_ts ? String(q.quote_ts) : undefined,
       fetchedAt: q.fetched_at ? String(q.fetched_at) : undefined,
     };
