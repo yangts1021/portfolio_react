@@ -164,6 +164,26 @@ export interface DayPnLSummary {
   missingSymbols: string[]; // 沒有昨收，算不出今日損益
 }
 
+// 分割後頭幾天，券商回傳的昨收可能還是分割前的價格（1 拆 5 時是現價的 5 倍左右）。
+// 直接拿來當基準，那一檔會憑空出現約八成的「今日虧損」。
+// 昨收對現價的倍數落在分割比例附近時，視為還沒調整，換算成分割後的單位。
+export const splitAdjustedPrevClose = (
+  prevClose: number,
+  price: number,
+  symbol: string,
+  splitEvents: { symbol: string; ratio: number }[],
+): number => {
+  if (!(prevClose > 0) || !(price > 0)) return prevClose;
+  const multiple = prevClose / price;
+  for (const sp of splitEvents) {
+    if (String(sp.symbol).toUpperCase() !== symbol) continue;
+    // 比例太接近 1 的分割跟一般漲跌分不出來，不處理
+    if (!(sp.ratio > 0) || (sp.ratio < 1.5 && sp.ratio > 1 / 1.5)) continue;
+    if (multiple > sp.ratio / 1.5 && multiple < sp.ratio * 1.5) return prevClose / sp.ratio;
+  }
+  return prevClose;
+};
+
 // 今日損益 = 現有市值 − 開盤前持股×昨收 − 今天買進成本 + 今天賣出所得。
 // 只用「現價 − 昨收」乘上現有股數的話，今天才買的部位會被多算一段昨收到買價的假損益。
 export const calculateDayPnL = (
@@ -177,6 +197,7 @@ export const calculateDayPnL = (
   }[],
   meta: Record<string, PriceQuoteMeta>,
   rates: Record<string, number>,
+  splitEvents: { symbol: string; ratio: number }[] = [],
 ): DayPnLSummary => {
   const bySymbol: Record<string, DayPnL> = {};
   const missingSymbols: string[] = [];
@@ -185,11 +206,12 @@ export const calculateDayPnL = (
 
   holdings.forEach((h) => {
     const m = meta[h.symbol];
-    const prev = m?.prevClose;
-    if (!prev || !(prev > 0) || !(h.currentPrice > 0)) {
+    const rawPrev = m?.prevClose;
+    if (!rawPrev || !(rawPrev > 0) || !(h.currentPrice > 0)) {
       missingSymbols.push(h.symbol);
       return;
     }
+    const prev = splitAdjustedPrevClose(rawPrev, h.currentPrice, h.symbol, splitEvents);
     const session = quoteSessionDate(m.fetchedAt || m.quoteTs || '', h.currency);
     let boughtQty = 0;
     let boughtCost = 0;

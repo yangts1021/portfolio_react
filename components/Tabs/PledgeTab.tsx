@@ -31,7 +31,7 @@ const PledgeTab: React.FC<PledgeTabProps> = ({
 
   // 質押股數依匯撥日後發生的分割調整（原始紀錄保持匯撥當時股數）
   const adjustedQty = (p: PledgeRecord) =>
-    applySplitsToQty(p.symbol, p.qty, p.transferDate, splitEvents);
+    applySplitsToQty(p.symbol, p.qty, p.transferDate || p.loanDate, splitEvents);
 
   const { totalLoan, overallRatio } = useMemo(() => {
     let loans = 0;

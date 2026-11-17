@@ -21,20 +21,32 @@ export const getColorClass = (val: number): string => {
   return 'text-gray-400';
 };
 
-// 某數量在 sinceDate 之後經歷的分割調整（質押股數等用）
+// 台北時間的今天（YYYY-MM-DD）。分割事件的生效日是台北日期
+export const taipeiToday = (): string =>
+  new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Taipei' });
+
+// 已經生效的分割事件。生效日還沒到的先不套用：
+// 這時報價還是分割前的價格，股數先乘上去市值會被放大成好幾倍
+export const effectiveSplits = (
+  splitEvents: SplitEvent[],
+  today: string = taipeiToday(),
+): SplitEvent[] => splitEvents.filter((sp) => sp.ratio > 0 && sp.date <= today);
+
+// 某數量在 sinceDate 之後經歷的分割調整（質押股數等用）。
+// sinceDate 空白或無法解析時，視為早於所有分割（沒填日期的舊紀錄一律調整）
 export const applySplitsToQty = (
   symbol: string,
   qty: number,
   sinceDate: string,
   splitEvents: SplitEvent[],
+  today: string = taipeiToday(),
 ): number => {
   const sym = String(symbol).toUpperCase();
   const since = new Date(sinceDate).getTime();
   let adjusted = qty;
-  splitEvents.forEach((sp) => {
+  effectiveSplits(splitEvents, today).forEach((sp) => {
     if (String(sp.symbol).toUpperCase() !== sym) return;
-    if (!(sp.ratio > 0)) return;
-    if (new Date(sp.date).getTime() > since) adjusted *= sp.ratio;
+    if (isNaN(since) || new Date(sp.date).getTime() > since) adjusted *= sp.ratio;
   });
   return adjusted;
 };
@@ -45,6 +57,7 @@ export const calculatePortfolio = (
   symbolBetas: Record<string, number>,
   exchangeRates: ExchangeRates,
   splitEvents: SplitEvent[] = [],
+  today: string = taipeiToday(),
 ) => {
   const portfolio: Record<string, PortfolioItem> = {};
   const brokerMap: Record<
@@ -60,11 +73,9 @@ export const calculatePortfolio = (
     ...transactions.map(
       (tx): PortfolioEvent => ({ time: new Date(tx.date).getTime(), kind: 'tx', tx }),
     ),
-    ...splitEvents
-      .filter((sp) => sp.ratio > 0)
-      .map(
-        (sp): PortfolioEvent => ({ time: new Date(sp.date).getTime(), kind: 'split', split: sp }),
-      ),
+    ...effectiveSplits(splitEvents, today).map(
+      (sp): PortfolioEvent => ({ time: new Date(sp.date).getTime(), kind: 'split', split: sp }),
+    ),
   ].sort((a, b) => a.time - b.time || (a.kind === 'split' ? 0 : 1) - (b.kind === 'split' ? 0 : 1));
 
   events.forEach((ev) => {
