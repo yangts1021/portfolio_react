@@ -9,7 +9,7 @@
 | 腳本 | 做什麼 | 讀 | 寫到哪 |
 |---|---|---|---|
 | `fetch_prices.py` | 持倉報價 | Supabase 交易、質押 | `prices.db` ＋ Supabase `quotes`、`daily_close` |
-| `backfill_history.py` | 用 yfinance 回補每日收盤與匯率 | Supabase 交易 | `prices.db` ＋ Supabase `daily_close`、`daily_fx` |
+| `backfill_history.py` | 回補每日收盤與匯率：台股向證交所／櫃買中心抓，美股與匯率用 yfinance | Supabase 交易 | `prices.db` ＋ Supabase `daily_close`、`daily_fx` |
 | `build_history.py` | 由每日收盤重算資產／損益曲線 | Supabase 交易、分割；`prices.db` 日線 | Supabase `nav_history` |
 | `sync_sinopac.py` | 永豐庫存、交易明細、交割帳戶餘額 | 永豐 API | Sheet「永豐庫存」「永豐交易紀錄」＋ Supabase `bank_accounts` 中 `auto_source = sinopac` 那一列的 TWD |
 | `sync_fubon.py` | 富邦庫存、近 30 天成交、未實現損益快照、交割帳戶餘額 | 富邦 API | Sheet「富邦庫存」「富邦交易紀錄」「富邦持倉快照」＋ Supabase `bank_accounts` 中 `auto_source = fubon` 那一列的 TWD |
@@ -56,13 +56,20 @@ daily_fx    (date, usdtwd)          每日匯率，美股部位要用當日匯�
 R(D) = D 之後所有分割比例的乘積。換算後直接乘上調整後收盤，曲線在分割前後是連續的。
 金額不需要調整（成本就是成本），均價則是 總成本 ÷ 現行單位股數。
 
+**台股不用 Yahoo**：台股的歷史收盤一律向證交所（上市）／櫃買中心（上櫃）逐月抓（`tw_exchange.py`），
+source 記為 `twse_hist` / `tpex_hist`。這是當天實際成交的價格（分割前就是分割前的價格），
+`build_history.py` 會依分割事件換算，所以台股分割不需要任何額外處理。換成交易所資料的台股，
+舊的 Yahoo 收盤會被刪掉；已經抓過的月份會跳過，每天的排程只抓最近一兩個月。
+Yahoo 對台股 ETF 的分割常只調整一半（00662 在 2026-11-17 生效，Yahoo 只調整了 11/9 之後），
+這是改用交易所的原因。以下說明只適用於美股。
+
 **新增分割事件之後**：`prices.db` 裡那一檔的歷史收盤是分割前下載的，還是分割前的價格，
 而且 Yahoo 對台股 ETF 的回溯調整常慢幾天。`build_history.py` 把 `yfinance_hist` 的收盤一律當成
 現行單位，所以直接重算會讓分割前的市值放大成比例倍（1 拆 5 就是 5 倍）。`backfill_history.py`
 處理了這件事（邏輯在 `splits.py`）：
 
 - 60 天內有分割生效的標的會整檔重新下載，不受 `--start` 限制，每日排程跑到就會自動修正
-- 下載回來的收盤如果還沒調整（生效日前後兩筆的倍數接近分割比例），寫入前先除以比例
+- 下載回來的收盤如果還沒調整（從生效日往前 30 天內，相鄰兩筆的倍數接近分割比例），跳動之前的收盤寫入前先除以比例
 - 生效日還沒到的分割，回補和重算都先不套用
 
 想立刻修正而不等排程：

@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
 """
-用 yfinance 回補每日收盤與匯率，讓資產曲線可以從第一筆交易那天開始畫。
+回補每日收盤與匯率，讓資產曲線可以從第一筆交易那天開始畫。
+
+台股一律向證交所／櫃買中心抓（tw_exchange.py），不用 Yahoo；換成交易所資料的
+台股會把舊的 Yahoo 收盤刪掉。月份已經抓過的就跳過，所以每天的排程只抓最近一兩個月。
+美股與匯率仍用 yfinance。以下關於 Yahoo 分割調整與後綴的說明只適用於非台股。
 
 標的清單取自 Supabase transactions 出現過的**所有**代號（含已出清、所有帳本），
 因為歷史曲線需要當時持有的標的，不只是現在還留著的。
@@ -31,6 +35,7 @@ from datetime import date, timedelta
 import pricedb
 from common import load_config
 from fetch_prices import looks_tw
+import tw_exchange
 from splits import effective, recently_split, to_current_units
 from supa import SupabaseError, from_config, list_books, load_splits, load_transactions
 
@@ -142,9 +147,30 @@ def main() -> int:
     total = 0
     remote_close: list[dict] = []
     remote_fx: list[dict] = []
+    today = date.today().isoformat()
+    tw_replaced: list[str] = []
     for symbol, currency in sorted(held.items()):
         rows = []
         used = ''
+        if looks_tw(symbol):
+            # 台股一律用交易所資料，不用 Yahoo（見 tw_exchange.py）
+            first = min(start, first_dates.get(symbol, start))
+            closes, source = tw_exchange.history(conn, symbol, first, start, today)
+            if source is None:
+                print(f'  {symbol:8} 證交所與櫃買中心都查無資料', file=sys.stderr)
+                continue
+            rows = [(symbol, d, c, source) for d, c in closes]
+            print(f'  {symbol:8} {source:12} {len(rows):5} 筆'
+                  + (f'  {rows[0][1]} ~ {rows[-1][1]}' if rows else '（已是最新）'))
+            if not args.dry_run:
+                pricedb.upsert_daily_close(conn, rows)
+                remote_close += [
+                    {'symbol': s, 'date': d, 'close': round(c, 6), 'source': src}
+                    for s, d, c, src in rows
+                ]
+                tw_replaced.append(symbol)
+            total += len(rows)
+            continue
         events = splits.get(symbol, [])
         # 剛分割的標的：prices.db 裡更早的收盤是分割前下載的舊單位，整檔重抓才換得掉
         symbol_start = start
@@ -180,6 +206,13 @@ def main() -> int:
             pricedb.upsert_daily_fx(conn, [(d, c, 'yfinance_hist') for d, c in fx])
             remote_fx = [{'date': d, 'usdtwd': round(c, 6), 'source': 'yfinance_hist'} for d, c in fx]
 
+    # 台股換成交易所資料後，舊的 Yahoo 收盤（含停牌期間 Yahoo 自己補的價格）一併刪掉
+    yahoo_sources = ('yfinance_hist', 'yfinance')
+    for symbol in tw_replaced:
+        conn.execute(
+            'DELETE FROM daily_close WHERE symbol = ? AND source IN (?, ?)', (symbol, *yahoo_sources)
+        )
+    conn.commit()
     conn.close()
 
     if write_remote:
@@ -188,6 +221,9 @@ def main() -> int:
                 client.upsert('daily_close', remote_close, 'symbol,date')
             if remote_fx:
                 client.upsert('daily_fx', remote_fx, 'date')
+            for symbol in tw_replaced:
+                client.delete('daily_close', {'symbol': f'eq.{symbol}',
+                                              'source': f'in.({",".join(yahoo_sources)})'})
             print(f'Supabase：收盤 {len(remote_close)} 筆、匯率 {len(remote_fx)} 筆')
         except SupabaseError as e:
             # prices.db 已寫好；下次回補（或 --start 指定區間重跑）會再補上
