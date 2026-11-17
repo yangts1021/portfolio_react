@@ -43,6 +43,14 @@
         textarea {
           font-size: 16px !important;
         }
+        /* iOS 的日期欄有自己的最小寬度，會撐破卡片；拿掉原生外觀才會乖乖跟著欄寬 */
+        input[type='date'] {
+          -webkit-appearance: none;
+          appearance: none;
+          min-width: 0;
+          max-width: 100%;
+          min-height: 2.75rem;
+        }
       }
       .animate-fade-in {
         animation: fadeIn 0.3s ease-in-out;
