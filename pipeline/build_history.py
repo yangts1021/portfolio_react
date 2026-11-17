@@ -29,6 +29,7 @@ import sys
 
 import pricedb
 from common import load_config
+from splits import effective
 from supa import SupabaseError, from_config, list_books, load_splits, load_transactions
 
 CSV_HEADER = ['日期', '總市值TWD', '總成本TWD', '未實現TWD', '已實現累計TWD', '報酬率%']
@@ -178,7 +179,8 @@ def main() -> int:
 
     client = from_config(load_config())
     books = list_books(client, args.profile)
-    splits = load_splits(client)
+    # 生效日還沒到的分割先不套用：股數乘了比例但價格還是分割前的，市值會被放大
+    splits = effective(load_splits(client))
     conn = pricedb.connect()
     failed = 0
 

@@ -256,7 +256,12 @@ const OverviewTab: React.FC<OverviewTabProps> = (props) => {
     let totalCollateral = 0;
     props.pledgeData.forEach((p) => {
       const price = props.currentPrices[p.symbol] ?? 0;
-      const qty = applySplitsToQty(p.symbol, p.qty, p.transferDate, props.splitEvents);
+      const qty = applySplitsToQty(
+        p.symbol,
+        p.qty,
+        p.transferDate || p.loanDate,
+        props.splitEvents,
+      );
       totalCollateral += qty * price;
     });
     const ratio = totalLoan > 0 ? (totalCollateral / totalLoan) * 100 : 0;
@@ -325,8 +330,15 @@ const OverviewTab: React.FC<OverviewTabProps> = (props) => {
         props.transactions,
         props.priceMeta,
         props.exchangeRates,
+        props.splitEvents,
       ),
-    [metrics.activeItems, props.transactions, props.priceMeta, props.exchangeRates],
+    [
+      metrics.activeItems,
+      props.transactions,
+      props.priceMeta,
+      props.exchangeRates,
+      props.splitEvents,
+    ],
   );
   // 帶正負號的金額與百分比；隱藏金額時連正負號一起遮掉
   const signedMoney = (v: number) =>
