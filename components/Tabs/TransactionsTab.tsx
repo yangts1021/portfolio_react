@@ -269,6 +269,10 @@ const TransactionsTab: React.FC<TransactionsTabProps> = ({
             </h2>
             <p className='text-[11px] text-gray-400 dark:text-gray-500 mb-4'>
               原始交易紀錄不變，自生效日起持股與均價依比例調整
+              <span className='block mt-1 text-amber-600 dark:text-amber-400'>
+                <i className='fa-solid fa-triangle-exclamation mr-1'></i>
+                生效日要填恢復交易日
+              </span>
             </p>
             <form onSubmit={handleSplitSubmit} className='space-y-3'>
               <div className='grid grid-cols-2 md:grid-cols-3 gap-3'>
