@@ -6,7 +6,6 @@ import {
   BankAccount,
   PledgeRecord,
   SplitEvent,
-  RateMode,
   ExchangeRates,
   Book,
 } from './types';
@@ -176,9 +175,6 @@ const PortfolioApp: React.FC<PortfolioAppProps> = ({ isDarkMode, setIsDarkMode, 
   const [exchangeRates, setExchangeRates] = useState<ExchangeRates>(() =>
     readCache(STORAGE_KEYS.RATES, { USD: 32.5, HKD: 4.1, JPY: 0.22, TWD: 1 }),
   );
-  const [rateMode, setRateMode] = useState<RateMode>(
-    () => (localStorage.getItem(STORAGE_KEYS.RATE_MODE) as RateMode) || 'auto',
-  );
 
   // UI State
   const [refreshing, setRefreshing] = useState(false);
@@ -193,7 +189,6 @@ const PortfolioApp: React.FC<PortfolioAppProps> = ({ isDarkMode, setIsDarkMode, 
   useEffect(() => writeCache(STORAGE_KEYS.PRICES, currentPrices), [currentPrices]);
   useEffect(() => writeCache(STORAGE_KEYS.PRICE_META, priceMeta), [priceMeta]);
   useEffect(() => writeCache(STORAGE_KEYS.RATES, exchangeRates), [exchangeRates]);
-  useEffect(() => localStorage.setItem(STORAGE_KEYS.RATE_MODE, rateMode), [rateMode]);
 
   const showToast = useCallback((msg: string) => {
     setToasts((prev) => [...prev, msg]);
@@ -303,13 +298,7 @@ const PortfolioApp: React.FC<PortfolioAppProps> = ({ isDarkMode, setIsDarkMode, 
     return () => clearInterval(id);
   }, [refreshPrices]);
 
-  const refreshEverything = useCallback(async () => {
-    await loadAll(false);
-    await refreshPrices(true);
-  }, [loadAll, refreshPrices]);
-
   const fetchExchangeRate = useCallback(async () => {
-    if (rateMode !== 'auto') return;
     try {
       const res = await fetch('https://open.er-api.com/v6/latest/USD');
       if (!res.ok) return;
@@ -320,11 +309,16 @@ const PortfolioApp: React.FC<PortfolioAppProps> = ({ isDarkMode, setIsDarkMode, 
     } catch (e) {
       console.warn('Rate fetch failed', e);
     }
-  }, [rateMode]);
+  }, []);
 
   useEffect(() => {
     fetchExchangeRate();
   }, [fetchExchangeRate]);
+
+  // 總覽的重新整理按鈕：資料、報價、匯率一起更新
+  const refreshEverything = useCallback(async () => {
+    await Promise.all([loadAll(false).then(() => refreshPrices(true)), fetchExchangeRate()]);
+  }, [loadAll, refreshPrices, fetchExchangeRate]);
 
   // ------------------------------------------------------------------------- //
   // Mutations: write to Supabase first, update local state only on success
@@ -486,12 +480,8 @@ const PortfolioApp: React.FC<PortfolioAppProps> = ({ isDarkMode, setIsDarkMode, 
               bankData={bankData}
               pledgeData={pledgeData}
               splitEvents={splitEvents}
-              rateMode={rateMode}
-              setRateMode={setRateMode}
-              setExchangeRates={setExchangeRates}
               onRefresh={refreshEverything}
               onBetaChange={handleBetaUpdate}
-              onRefreshRate={fetchExchangeRate}
               isDarkMode={isDarkMode}
               hideAmounts={hideAmounts}
             />

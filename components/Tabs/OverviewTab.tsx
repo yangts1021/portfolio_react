@@ -5,7 +5,6 @@ import {
   BankAccount,
   PledgeRecord,
   SplitEvent,
-  RateMode,
   ExchangeRates,
   PortfolioItem,
   HistoryPoint,
@@ -37,11 +36,7 @@ interface OverviewTabProps {
   bankData: BankAccount[];
   pledgeData: PledgeRecord[];
   splitEvents: SplitEvent[];
-  rateMode: RateMode;
-  setRateMode: (mode: RateMode) => void;
-  setExchangeRates: React.Dispatch<React.SetStateAction<ExchangeRates>>;
   onRefresh: () => void;
-  onRefreshRate: () => void;
   onBetaChange: (symbol: string, beta: number) => void;
   isDarkMode: boolean;
   hideAmounts: boolean;
@@ -380,83 +375,7 @@ const OverviewTab: React.FC<OverviewTabProps> = (props) => {
     <div className='animate-fade-in flex flex-col gap-4 md:gap-6'>
       <QuoteFreshnessBar holdings={metrics.activeItems} meta={props.priceMeta} />
 
-      <div className='order-6 md:order-none grid grid-cols-1 md:grid-cols-2 gap-4'>
-        {/* 現金 & 匯率卡片 */}
-        <div className='bg-white dark:bg-gray-900 p-4 rounded-xl shadow-sm border border-gray-100 dark:border-gray-800 transition-colors'>
-          <div className='flex justify-between items-center mb-4'>
-            <h3 className='font-bold text-gray-700 dark:text-gray-200 flex items-center'>
-              <i className='fa-solid fa-piggy-bank mr-2 text-yellow-500'></i> 現金 & 匯率
-            </h3>
-            <div className='flex bg-gray-100 dark:bg-gray-800 rounded-lg p-0.5 text-xs'>
-              <button
-                onClick={() => props.setRateMode('manual')}
-                className={`px-2 py-1 rounded-md transition-all ${props.rateMode === 'manual' ? 'bg-white dark:bg-gray-700 shadow text-blue-600 dark:text-blue-400 font-bold' : 'text-gray-500 dark:text-gray-400'}`}
-              >
-                手動
-              </button>
-              <button
-                onClick={() => props.setRateMode('auto')}
-                className={`px-2 py-1 rounded-md transition-all ${props.rateMode === 'auto' ? 'bg-white dark:bg-gray-700 shadow text-blue-600 dark:text-blue-400 font-bold' : 'text-gray-500 dark:text-gray-400'}`}
-              >
-                自動
-              </button>
-            </div>
-          </div>
-          <div className='space-y-3'>
-            <div className='flex items-center justify-between bg-blue-50 dark:bg-blue-900/20 p-2 rounded-lg border border-blue-100 dark:border-blue-900/40'>
-              <label className='text-blue-600 dark:text-blue-400 font-medium text-sm'>
-                USD 匯率
-              </label>
-              <div className='flex items-center gap-2'>
-                {props.rateMode === 'auto' && (
-                  <button
-                    onClick={props.onRefreshRate}
-                    className='text-blue-400 hover:text-blue-600 transition-colors'
-                  >
-                    <i className='fa-solid fa-rotate'></i>
-                  </button>
-                )}
-                <div className='relative'>
-                  <input
-                    type='number'
-                    step='0.01'
-                    readOnly={props.rateMode === 'auto'}
-                    value={
-                      props.rateMode === 'auto'
-                        ? props.exchangeRates.USD.toFixed(2)
-                        : props.exchangeRates.USD
-                    }
-                    onChange={(e) =>
-                      props.setExchangeRates({
-                        ...props.exchangeRates,
-                        USD: parseFloat(e.target.value) || 0,
-                      })
-                    }
-                    className={`w-24 bg-white dark:bg-gray-800 border border-blue-200 dark:border-blue-800 rounded p-1 text-right font-mono font-bold dark:text-white outline-none focus:ring-1 focus:ring-blue-500 transition-all ${props.rateMode === 'auto' ? 'cursor-default' : 'cursor-text'}`}
-                  />
-                </div>
-              </div>
-            </div>
-            <div className='grid grid-cols-2 gap-2 text-sm'>
-              <div className='flex justify-between p-2 bg-gray-50 dark:bg-gray-800 rounded dark:text-gray-300'>
-                <span>TWD 總額</span>
-                <span className='font-mono font-bold'>
-                  {fm(bankSummary.twd, { maximumFractionDigits: 0 })}
-                </span>
-              </div>
-              <div className='flex justify-between p-2 bg-gray-50 dark:bg-gray-800 rounded dark:text-gray-300'>
-                <span>USD 總額</span>
-                <span className='font-mono font-bold'>
-                  {fm(bankSummary.usd, {
-                    minimumFractionDigits: 0,
-                    maximumFractionDigits: 2,
-                  })}
-                </span>
-              </div>
-            </div>
-          </div>
-        </div>
-
+      <div className='order-6 md:order-none grid grid-cols-1 gap-4'>
         {/* 負債卡片 */}
         <div className='bg-white dark:bg-gray-900 p-4 rounded-xl shadow-sm border border-gray-100 dark:border-gray-800 transition-colors'>
           <h3 className='font-bold text-gray-700 dark:text-gray-200 flex items-center mb-4'>
