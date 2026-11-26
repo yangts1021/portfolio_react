@@ -66,7 +66,7 @@ const HistoryChart: React.FC<HistoryChartProps> = ({ history, isDarkMode, hideAm
   // 區間績效看的是總損益的變化，避免把期間內的加碼算成獲利。
   // 「全部」的基準是 0（開始投資前沒有損益）而不是首日 —— 首日已經帶著
   // 建帳前累積的損益（既有部位是用原始均價登錄的），拿它當基準會少算那一段，
-  // 導致數字對不上總覽的「總淨損益」。
+  // 導致數字對不上總覽的「總損益」。
   const latest = history[history.length - 1];
   const first = data[0];
   const isAll = range === 'ALL';
