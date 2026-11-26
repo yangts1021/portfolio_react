@@ -24,6 +24,7 @@
 from __future__ import annotations
 
 import argparse
+import signal
 import sqlite3
 import sys
 import time
@@ -427,6 +428,9 @@ def push_to_supabase(client, quotes: dict[str, Quote]) -> None:
 # main
 # --------------------------------------------------------------------------- #
 
+ROUND_LIMIT_SEC = 150  # 排程每 180 秒一輪，單輪超過這個時間就放棄
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument('--dry-run', action='store_true',
@@ -443,6 +447,10 @@ def main() -> int:
 
     if args.market_hours_only and not (tw_market_open() or us_market_open()):
         return 0
+    if args.market_hours_only:
+        # launchd 在上一輪還沒結束時不會再啟動新的一輪，任何一個請求卡住就會讓報價停更好幾天
+        # （2026-11 曾卡在 SSL read 20 天）。給整輪一個上限，超過就結束，下一輪重新來過
+        signal.alarm(ROUND_LIMIT_SEC)
 
     config = load_config()
     # 指定標的又不寫遠端時，完全不需要 Supabase
