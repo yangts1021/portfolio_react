@@ -151,7 +151,7 @@ const QuoteFreshnessBar: React.FC<{
 
   return (
     <div
-      className={`order-1 md:order-none flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-2 rounded-xl border text-xs transition-colors ${style.box}`}
+      className={`flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-2 rounded-xl border text-xs transition-colors ${style.box}`}
       title={
         f.updatedAt
           ? `最舊一筆報價寫入於 ${f.updatedAt.toLocaleString('zh-TW', { hour12: false })}`
@@ -342,6 +342,9 @@ const OverviewTab: React.FC<OverviewTabProps> = (props) => {
     ],
   );
   // 帶正負號的金額與百分比；隱藏金額時連正負號一起遮掉
+  const totalPnL = metrics.unrealizedPnLTWD + metrics.realizedPnLTWD;
+  const totalReturnPct = metrics.stockCostTWD > 0 ? (totalPnL / metrics.stockCostTWD) * 100 : null;
+
   const signedMoney = (v: number) =>
     props.hideAmounts ? fm(v) : `${v > 0 ? '+' : ''}${fm(v, { maximumFractionDigits: 0 })}`;
   const signedPct = (v: number | null) => (v === null ? '' : `${v > 0 ? '+' : ''}${v.toFixed(2)}%`);
@@ -381,54 +384,87 @@ const OverviewTab: React.FC<OverviewTabProps> = (props) => {
     <div className='animate-fade-in flex flex-col gap-4 md:gap-6'>
       <QuoteFreshnessBar holdings={metrics.activeItems} meta={props.priceMeta} />
 
-      <div className='order-6 md:order-none grid grid-cols-1 gap-4'>
-        {/* 負債卡片 */}
-        <div className='bg-white dark:bg-gray-900 p-4 rounded-xl shadow-sm border border-gray-100 dark:border-gray-800 transition-colors'>
-          <h3 className='font-bold text-gray-700 dark:text-gray-200 flex items-center mb-4'>
-            <i className='fa-solid fa-money-check-dollar mr-2 text-red-500'></i> 負債明細 (TWD)
-          </h3>
-          <div className='space-y-2 text-sm max-h-[140px] overflow-y-auto pr-1'>
-            {props.bankData
-              .filter((b) => (b.loan || 0) > 0)
-              .map((b) => (
-                <div key={b.bank} className='flex justify-between dark:text-gray-300 items-center'>
-                  <span className='text-gray-500 dark:text-gray-400'>{b.bank} 貸款</span>
-                  <span className='font-mono text-red-500 dark:text-red-400 font-bold'>
-                    {fm(b.loan, { maximumFractionDigits: 0 })}
-                  </span>
-                </div>
-              ))}
-            {pledgeSummary.totalLoan > 0 && (
-              <div className='flex justify-between dark:text-gray-300 items-center'>
-                <span className='text-gray-500 dark:text-gray-400'>股票質押 借款</span>
-                <span className='font-mono text-red-500 dark:text-red-400 font-bold'>
-                  {fm(pledgeSummary.totalLoan, { maximumFractionDigits: 0 })}
+      {/* 淨資產：資產 − 負債，兩欄列出組成 */}
+      <div className='bg-white dark:bg-gray-900 p-4 md:p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-800 transition-colors'>
+        <div className='text-center'>
+          <div className='text-gray-500 dark:text-gray-400 text-xs md:text-sm uppercase tracking-wider mb-1 md:mb-2 font-medium'>
+            淨資產總額
+          </div>
+          <div className='text-4xl md:text-5xl font-bold text-gray-900 dark:text-white'>
+            {fm(metrics.netWorth, { maximumFractionDigits: 0 })}
+          </div>
+        </div>
+        <div className='grid grid-cols-1 md:grid-cols-2 gap-3 mt-4 md:mt-6 text-sm'>
+          <div className='bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-900/40 rounded-lg p-3'>
+            <div className='flex justify-between font-bold mb-2 text-blue-700 dark:text-blue-300'>
+              <span>資產</span>
+              <span className='font-mono'>
+                {fm(metrics.totalAssets, { maximumFractionDigits: 0 })}
+              </span>
+            </div>
+            <div className='space-y-1.5 text-blue-900/80 dark:text-blue-200/90'>
+              <div className='flex justify-between'>
+                <span>證券市值</span>
+                <span className='font-mono'>
+                  {fm(metrics.stockMarketValueTWD, { maximumFractionDigits: 0 })}
                 </span>
               </div>
-            )}
-            {props.bankData.filter((b) => (b.loan || 0) > 0).length === 0 &&
-              pledgeSummary.totalLoan === 0 && (
-                <div className='text-center text-gray-400 py-4'>目前無負債紀錄</div>
-              )}
+              <div className='flex justify-between items-start'>
+                <span>
+                  銀行餘額
+                  <span className='block text-[11px] font-mono text-blue-500/80 dark:text-blue-400/70'>
+                    TWD {fm(bankSummary.twd, { maximumFractionDigits: 0 })} + USD{' '}
+                    {fm(bankSummary.usd, { maximumFractionDigits: 0 })}
+                  </span>
+                </span>
+                <span className='text-right'>
+                  <span className='font-mono'>
+                    {fm(bankSummary.totalCashTWD, { maximumFractionDigits: 0 })}
+                  </span>
+                  <span
+                    className='block text-[11px] font-mono text-blue-500/80 dark:text-blue-400/70'
+                    title={fxTitle}
+                  >
+                    USD/TWD {props.exchangeRates.USD.toFixed(2)}
+                  </span>
+                </span>
+              </div>
+            </div>
           </div>
-          <div className='flex justify-between border-t border-gray-100 dark:border-gray-800 pt-2 font-bold dark:text-white mt-2'>
-            <span>總負債合計</span>
-            <span className='font-mono text-red-600 dark:text-red-400'>
-              {fm(metrics.totalLiabilities, { maximumFractionDigits: 0 })}
-            </span>
+          <div className='bg-orange-50 dark:bg-orange-900/20 border border-orange-100 dark:border-orange-900/40 rounded-lg p-3'>
+            <div className='flex justify-between font-bold mb-2 text-orange-700 dark:text-orange-300'>
+              <span>負債</span>
+              <span className='font-mono'>
+                {fm(metrics.totalLiabilities, { maximumFractionDigits: 0 })}
+              </span>
+            </div>
+            <div className='space-y-1.5 text-orange-900/80 dark:text-orange-200/90'>
+              {props.bankData
+                .filter((b) => (b.loan || 0) > 0)
+                .map((b) => (
+                  <div key={b.bank} className='flex justify-between'>
+                    <span>{b.bank} 貸款</span>
+                    <span className='font-mono'>{fm(b.loan, { maximumFractionDigits: 0 })}</span>
+                  </div>
+                ))}
+              {pledgeSummary.totalLoan > 0 && (
+                <div className='flex justify-between'>
+                  <span>股票質押借款</span>
+                  <span className='font-mono'>
+                    {fm(pledgeSummary.totalLoan, { maximumFractionDigits: 0 })}
+                  </span>
+                </div>
+              )}
+              {metrics.totalLiabilities === 0 && (
+                <div className='text-orange-500/80 dark:text-orange-400/70'>目前無負債</div>
+              )}
+            </div>
           </div>
         </div>
       </div>
 
-      <div className='order-4 md:order-none grid grid-cols-2 md:grid-cols-3 gap-3 md:gap-4'>
-        <div className='bg-white dark:bg-gray-900 p-3 md:p-5 rounded-xl shadow-sm border border-gray-100 dark:border-gray-800 text-center transition-colors'>
-          <div className='text-gray-500 dark:text-gray-400 text-xs md:text-sm uppercase tracking-wider mb-1 md:mb-2 font-medium'>
-            證券市值
-          </div>
-          <div className='text-lg md:text-2xl font-bold dark:text-white'>
-            {fm(metrics.stockMarketValueTWD, { maximumFractionDigits: 0 })}
-          </div>
-        </div>
+      {/* 損益：成本在最前面，方便對照 */}
+      <div className='grid grid-cols-2 md:grid-cols-5 gap-3 md:gap-4'>
         <div className='bg-white dark:bg-gray-900 p-3 md:p-5 rounded-xl shadow-sm border border-gray-100 dark:border-gray-800 text-center transition-colors'>
           <div className='text-gray-500 dark:text-gray-400 text-xs md:text-sm uppercase tracking-wider mb-1 md:mb-2 font-medium'>
             總投入成本
@@ -437,27 +473,6 @@ const OverviewTab: React.FC<OverviewTabProps> = (props) => {
             {fm(metrics.stockCostTWD, { maximumFractionDigits: 0 })}
           </div>
         </div>
-        <div className='relative col-span-2 md:col-span-1 bg-white dark:bg-gray-900 p-3 md:p-5 rounded-xl shadow-sm border border-gray-100 dark:border-gray-800 text-center transition-colors'>
-          <div
-            className='absolute top-2 right-3 text-[10px] md:text-xs font-mono text-gray-400 dark:text-gray-500'
-            title={fxTitle}
-          >
-            USD/TWD {props.exchangeRates.USD.toFixed(2)}
-          </div>
-          <div className='text-gray-500 dark:text-gray-400 text-xs md:text-sm uppercase tracking-wider mb-1 md:mb-2 font-medium'>
-            銀行總餘額
-          </div>
-          <div className='text-lg md:text-2xl font-bold dark:text-white'>
-            {fm(bankSummary.totalCashTWD, { maximumFractionDigits: 0 })}
-          </div>
-          <div className='mt-1 text-xs font-mono text-gray-500 dark:text-gray-400'>
-            TWD {fm(bankSummary.twd, { maximumFractionDigits: 0 })} + USD{' '}
-            {fm(bankSummary.usd, { maximumFractionDigits: 0 })}
-          </div>
-        </div>
-      </div>
-
-      <div className='order-3 md:order-none grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4'>
         <div
           className='bg-white dark:bg-gray-900 p-3 md:p-5 rounded-xl shadow-sm border border-gray-100 dark:border-gray-800 text-center transition-colors'
           title={
@@ -496,136 +511,25 @@ const OverviewTab: React.FC<OverviewTabProps> = (props) => {
             {fm(metrics.realizedPnLTWD, { maximumFractionDigits: 0 })}
           </div>
         </div>
-        <div className='bg-white dark:bg-gray-900 p-3 md:p-5 rounded-xl shadow-sm border border-gray-100 dark:border-gray-800 text-center border-l-4 border-blue-400 transition-colors'>
+        <div
+          className='col-span-2 md:col-span-1 bg-white dark:bg-gray-900 p-3 md:p-5 rounded-xl shadow-sm border border-gray-100 dark:border-gray-800 text-center transition-colors border-l-4 border-blue-400'
+          title='報酬率 = 總損益 ÷ 目前持倉的投入成本'
+        >
           <div className='text-gray-500 dark:text-gray-400 text-xs md:text-sm uppercase tracking-wider mb-1 md:mb-2 font-medium'>
             總損益
+            {totalReturnPct !== null && (
+              <span className={`ml-1.5 normal-case font-mono ${getColorClass(totalPnL)}`}>
+                {signedPct(totalReturnPct)}
+              </span>
+            )}
           </div>
-          <div
-            className={`text-lg md:text-2xl font-bold ${getColorClass(metrics.unrealizedPnLTWD + metrics.realizedPnLTWD)}`}
-          >
-            {fm(metrics.unrealizedPnLTWD + metrics.realizedPnLTWD, {
-              maximumFractionDigits: 0,
-            })}
-          </div>
-        </div>
-      </div>
-
-      <div className='order-2 md:order-none bg-gradient-to-br from-blue-600 to-blue-800 dark:from-blue-700 dark:to-blue-900 p-4 md:p-6 rounded-xl shadow-md text-center text-white transition-all'>
-        <div className='text-blue-100 text-xs md:text-sm uppercase tracking-wider mb-1 md:mb-2 font-medium'>
-          淨資產總額
-        </div>
-        <div className='text-4xl md:text-5xl font-bold'>
-          {fm(metrics.netWorth, { maximumFractionDigits: 0 })}
-        </div>
-        <div className='text-blue-200 text-xs mt-2 font-mono'>
-          {fm(metrics.totalAssets, { maximumFractionDigits: 0 })} (資產) -{' '}
-          {fm(metrics.totalLiabilities, { maximumFractionDigits: 0 })} (負債)
-        </div>
-      </div>
-
-      <div className='order-7 md:order-none grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-6'>
-        <div className='bg-white dark:bg-gray-900 p-5 rounded-xl shadow-sm border border-gray-100 dark:border-gray-800 transition-colors'>
-          <h3 className='text-sm font-bold text-gray-700 dark:text-gray-200 mb-4'>資產配置比例</h3>
-          <div className='h-56 md:h-72'>
-            <ResponsiveContainer width='100%' height='100%'>
-              <PieChart margin={{ top: 20, right: 50, bottom: 20, left: 50 }}>
-                <Pie
-                  data={chartData}
-                  innerRadius={55}
-                  outerRadius={75}
-                  paddingAngle={5}
-                  dataKey='value'
-                  label={renderCustomizedLabel}
-                  labelLine={{
-                    stroke: props.isDarkMode ? '#64748b' : '#94a3b8',
-                    strokeWidth: 1.5,
-                  }}
-                >
-                  {chartData.map((entry, index) => (
-                    <Cell
-                      key={index}
-                      fill={CATEGORY_COLORS[entry.name] || '#ccc'}
-                      strokeWidth={0}
-                    />
-                  ))}
-                </Pie>
-                <RechartsTooltip
-                  formatter={(v: any) => fm(v as number, { maximumFractionDigits: 0 })}
-                  contentStyle={{
-                    backgroundColor: props.isDarkMode ? '#111827' : '#fff',
-                    borderRadius: '8px',
-                    border: 'none',
-                    boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)',
-                    color: props.isDarkMode ? '#fff' : '#000',
-                  }}
-                  itemStyle={{ color: props.isDarkMode ? '#fff' : '#000' }}
-                />
-              </PieChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-
-        <div className='lg:col-span-2 bg-white dark:bg-gray-900 p-5 rounded-xl shadow-sm border border-gray-100 dark:border-gray-800 flex flex-col justify-between transition-colors'>
-          <div>
-            <div className='flex justify-between items-start mb-4 md:mb-6'>
-              <h3 className='text-sm font-bold text-gray-700 dark:text-gray-200 uppercase tracking-wider'>
-                投資曝險 & 組合 Beta
-              </h3>
-            </div>
-
-            <div className='flex flex-col md:flex-row gap-3 md:gap-6 md:mb-8'>
-              {/* 放大後的 Beta 字卡 */}
-              <div className='flex-none w-full md:w-48 bg-gray-900 dark:bg-blue-600 text-white rounded-2xl p-4 md:p-6 shadow-xl flex flex-col items-center justify-center border-b-4 border-blue-500 dark:border-blue-400 transition-all hover:scale-105 duration-300'>
-                <div className='text-sm uppercase font-bold tracking-widest opacity-80 mb-2'>
-                  Portfolio Beta
-                </div>
-                <div className='text-4xl md:text-5xl font-black font-mono'>
-                  {metrics.totalBeta.toFixed(2)}
-                </div>
-                <div className='text-[10px] mt-2 px-2 py-0.5 bg-white/20 rounded-full font-bold'>
-                  市場敏感度
-                </div>
-              </div>
-
-              {/* 類別權重網格 */}
-              <div className='flex-1 grid grid-cols-3 gap-2 md:gap-4'>
-                {(Object.entries(metrics.categoryTotals) as [string, number][])
-                  .filter(([name]) => name !== '其他')
-                  .map(([name, val]) => (
-                    <div
-                      key={name}
-                      className='p-2.5 md:p-4 bg-gray-50 dark:bg-gray-800/50 rounded-xl border border-gray-100 dark:border-gray-800 shadow-sm flex flex-col justify-center transition-all hover:shadow-md'
-                    >
-                      <div className='flex flex-wrap justify-between items-start gap-1 mb-1'>
-                        <div className='text-xs md:text-sm text-gray-400 dark:text-gray-500 font-bold uppercase tracking-wide flex items-center'>
-                          <span
-                            className='w-1.5 h-1.5 rounded-full mr-1.5'
-                            style={{ backgroundColor: CATEGORY_COLORS[name] }}
-                          ></span>
-                          {name}
-                        </div>
-                        <div className='text-[9px] px-1.5 py-0.5 bg-gray-200 dark:bg-gray-700 text-gray-500 dark:text-gray-400 rounded-md font-bold'>
-                          {categoryRules[name]}
-                        </div>
-                      </div>
-                      <div className='text-lg md:text-2xl font-bold dark:text-white font-mono'>
-                        {metrics.totalAssets > 0
-                          ? ((val / metrics.totalAssets) * 100).toFixed(1)
-                          : '0.0'}
-                        %
-                      </div>
-                      <div className='text-[10px] text-gray-400 dark:text-gray-500 mt-1 font-bold'>
-                        {fm(val, { maximumFractionDigits: 0 })} TWD
-                      </div>
-                    </div>
-                  ))}
-              </div>
-            </div>
+          <div className={`text-lg md:text-2xl font-bold ${getColorClass(totalPnL)}`}>
+            {fm(totalPnL, { maximumFractionDigits: 0 })}
           </div>
         </div>
       </div>
 
-      <div className='order-8 md:order-none'>
+      <div>
         <HistoryChart
           history={props.history}
           isDarkMode={props.isDarkMode}
@@ -633,7 +537,7 @@ const OverviewTab: React.FC<OverviewTabProps> = (props) => {
         />
       </div>
 
-      <div className='order-5 md:order-none bg-white dark:bg-gray-900 rounded-xl shadow-sm border border-gray-100 dark:border-gray-800 overflow-hidden transition-colors'>
+      <div className='bg-white dark:bg-gray-900 rounded-xl shadow-sm border border-gray-100 dark:border-gray-800 overflow-hidden transition-colors'>
         <div className='p-4 border-b border-gray-100 dark:border-gray-800 bg-gray-50 dark:bg-gray-800/50 flex justify-between items-center'>
           <h3 className='font-bold text-gray-700 dark:text-gray-200'>持倉明細與即時損益</h3>
           <button
@@ -972,6 +876,104 @@ const OverviewTab: React.FC<OverviewTabProps> = (props) => {
                   ))}
             </tbody>
           </table>
+        </div>
+      </div>
+
+      <div className='grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-6 items-start'>
+        <div className='bg-white dark:bg-gray-900 p-5 rounded-xl shadow-sm border border-gray-100 dark:border-gray-800 transition-colors'>
+          <h3 className='text-sm font-bold text-gray-700 dark:text-gray-200 mb-4'>資產配置比例</h3>
+          <div className='h-56 md:h-72'>
+            <ResponsiveContainer width='100%' height='100%'>
+              <PieChart margin={{ top: 20, right: 50, bottom: 20, left: 50 }}>
+                <Pie
+                  data={chartData}
+                  innerRadius={55}
+                  outerRadius={75}
+                  paddingAngle={5}
+                  dataKey='value'
+                  label={renderCustomizedLabel}
+                  labelLine={{
+                    stroke: props.isDarkMode ? '#64748b' : '#94a3b8',
+                    strokeWidth: 1.5,
+                  }}
+                >
+                  {chartData.map((entry, index) => (
+                    <Cell
+                      key={index}
+                      fill={CATEGORY_COLORS[entry.name] || '#ccc'}
+                      strokeWidth={0}
+                    />
+                  ))}
+                </Pie>
+                <RechartsTooltip
+                  formatter={(v: any) => fm(v as number, { maximumFractionDigits: 0 })}
+                  contentStyle={{
+                    backgroundColor: props.isDarkMode ? '#111827' : '#fff',
+                    borderRadius: '8px',
+                    border: 'none',
+                    boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)',
+                    color: props.isDarkMode ? '#fff' : '#000',
+                  }}
+                  itemStyle={{ color: props.isDarkMode ? '#fff' : '#000' }}
+                />
+              </PieChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+
+        <div className='lg:col-span-2 bg-white dark:bg-gray-900 p-5 rounded-xl shadow-sm border border-gray-100 dark:border-gray-800 flex flex-col justify-between transition-colors'>
+          <div>
+            <div className='flex justify-between items-start mb-4'>
+              <h3 className='text-sm font-bold text-gray-700 dark:text-gray-200 uppercase tracking-wider'>
+                投資曝險 & 組合 Beta
+              </h3>
+            </div>
+
+            <div className='grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-4'>
+              <div className='p-2.5 md:p-4 bg-blue-50 dark:bg-blue-900/20 rounded-xl border border-blue-100 dark:border-blue-900/40 flex flex-col justify-center'>
+                <div className='text-xs md:text-sm text-blue-600 dark:text-blue-400 font-bold uppercase tracking-wide mb-1'>
+                  組合 Beta
+                </div>
+                <div className='text-lg md:text-2xl font-bold font-mono text-blue-700 dark:text-blue-300'>
+                  {metrics.totalBeta.toFixed(2)}
+                </div>
+                <div className='text-[10px] text-blue-500/80 dark:text-blue-400/70 mt-1 font-bold'>
+                  市場敏感度
+                </div>
+              </div>
+              {/* 類別權重 */}
+              {(Object.entries(metrics.categoryTotals) as [string, number][])
+                .filter(([name]) => name !== '其他')
+                .map(([name, val]) => (
+                  <div
+                    key={name}
+                    className='p-2.5 md:p-4 bg-gray-50 dark:bg-gray-800/50 rounded-xl border border-gray-100 dark:border-gray-800 flex flex-col justify-center'
+                  >
+                    <div className='flex flex-wrap justify-between items-start gap-1 mb-1'>
+                      <div className='text-xs md:text-sm text-gray-400 dark:text-gray-500 font-bold uppercase tracking-wide flex items-center'>
+                        <span
+                          className='w-1.5 h-1.5 rounded-full mr-1.5'
+                          style={{ backgroundColor: CATEGORY_COLORS[name] }}
+                        ></span>
+                        {name}
+                      </div>
+                      <div className='text-[9px] px-1.5 py-0.5 bg-gray-200 dark:bg-gray-700 text-gray-500 dark:text-gray-400 rounded-md font-bold'>
+                        {categoryRules[name]}
+                      </div>
+                    </div>
+                    <div className='text-lg md:text-2xl font-bold dark:text-white font-mono'>
+                      {metrics.totalAssets > 0
+                        ? ((val / metrics.totalAssets) * 100).toFixed(1)
+                        : '0.0'}
+                      %
+                    </div>
+                    <div className='text-[10px] text-gray-400 dark:text-gray-500 mt-1 font-bold'>
+                      {fm(val, { maximumFractionDigits: 0 })} TWD
+                    </div>
+                  </div>
+                ))}
+            </div>
+          </div>
         </div>
       </div>
     </div>

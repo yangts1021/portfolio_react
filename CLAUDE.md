@@ -38,7 +38,7 @@ React 18 + TypeScript SPA for investment portfolio tracking. UI is in Traditiona
 **Tabs:**
 
 - `TransactionsTab` — Add/view buy/sell records, sorted display with "show all" toggle
-- `OverviewTab` — Portfolio analysis: P&L table, pie chart (Recharts), cash summary, exchange rates, beta-weighted allocation, asset/P&L history curve (`components/UI/HistoryChart.tsx`, from `nav_history`)
+- `OverviewTab` — Portfolio analysis: net worth card with asset/liability breakdown (bank balance shows TWD + USD and the USD/TWD rate), P&L row with total return %, asset/P&L history curve (`components/UI/HistoryChart.tsx`, from `nav_history`), holdings P&L table, pie chart (Recharts) and beta-weighted allocation
 - `BankTab` — Multi-currency bank account management with inline editing
 - `PledgeTab` — Stock pledge/collateral loan tracking with auto-calculated repayment dates; collateral value is computed from live prices, not stored
 - Crypto (`CryptoTab` / `PionexTab` / `BitfinexTab`) is unwired until Pionex/Bitfinex data moves from GAS into Supabase `crypto_positions`
@@ -91,7 +91,7 @@ See `pipeline/README.md` for commands and setup detail.
 - Prettier: single quotes, trailing commas, 100 char line width, 2-space indent
 - ESLint extends: eslint:recommended, @typescript-eslint/recommended, react-hooks/recommended, prettier
 - Tailwind CSS via CDN (class-based dark mode with `dark:` prefix)
-- Mobile layout: below the `md` breakpoint the tabs move to a bottom bar (`BottomTabs` in `components/Layout/Navbar.tsx`) and every data table is replaced by a card list — the pattern is a `md:hidden` card list next to a `hidden md:block` table, so a new column must be added to both. `OverviewTab` reorders its sections on phones with `order-*` classes (net worth and P&L first). Inputs are forced to 16px on phones in `index.html` to stop iOS zooming on focus
+- Mobile layout: below the `md` breakpoint the tabs move to a bottom bar (`BottomTabs` in `components/Layout/Navbar.tsx`) and every data table is replaced by a card list — the pattern is a `md:hidden` card list next to a `hidden md:block` table, so a new column must be added to both. `OverviewTab` uses one section order on every screen size (freshness → net worth with assets/liabilities → P&L row → history curve → holdings → allocation/Beta), so there are no `order-*` overrides. Inputs are forced to 16px on phones in `index.html` to stop iOS zooming on focus
 - Path alias: `@/` maps to project root
 
 ## Build Configuration
