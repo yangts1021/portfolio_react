@@ -10,7 +10,7 @@ import {
   Book,
 } from './types';
 import { STORAGE_KEYS, LEGACY_STORAGE_KEYS } from './constants';
-import { isMarketHours, PriceQuoteMeta } from './utils/marketData';
+import { FX_SYMBOL, isMarketHours, PriceQuoteMeta } from './utils/marketData';
 import { supabase } from './utils/supabase';
 import * as db from './utils/db';
 import Navbar, { BottomTabs } from './components/Layout/Navbar';
@@ -268,14 +268,15 @@ const PortfolioApp: React.FC<PortfolioAppProps> = ({ isDarkMode, setIsDarkMode, 
   }, [transactions, pledgeData]);
   const priceSymbolsKey = priceSymbols.join(',');
 
-  // 即時價格：pipeline 每 3 分鐘寫進 Supabase quotes，這裡直接讀
+  // 即時價格與 USD/TWD 匯率：pipeline 每 3 分鐘寫進 Supabase quotes，這裡直接讀
   const refreshPrices = useCallback(
     async (isSilent = false) => {
       const symbols = priceSymbolsKey ? priceSymbolsKey.split(',') : [];
-      if (symbols.length === 0) return;
       try {
-        const { prices, meta } = await db.loadQuotes(symbols);
-        setCurrentPrices((prev) => ({ ...prev, ...prices }));
+        const { prices, meta } = await db.loadQuotes([...symbols, FX_SYMBOL]);
+        const { [FX_SYMBOL]: usdTwd, ...holdingPrices } = prices;
+        if (usdTwd) setExchangeRates((prev) => ({ ...prev, USD: usdTwd }));
+        setCurrentPrices((prev) => ({ ...prev, ...holdingPrices }));
         setPriceMeta((prev) => ({ ...prev, ...meta }));
         if (!isSilent) showToast('價格已更新');
       } catch (e) {
@@ -298,27 +299,11 @@ const PortfolioApp: React.FC<PortfolioAppProps> = ({ isDarkMode, setIsDarkMode, 
     return () => clearInterval(id);
   }, [refreshPrices]);
 
-  const fetchExchangeRate = useCallback(async () => {
-    try {
-      const res = await fetch('https://open.er-api.com/v6/latest/USD');
-      if (!res.ok) return;
-      const data = await res.json();
-      if (data?.rates?.TWD) {
-        setExchangeRates((prev) => ({ ...prev, USD: parseFloat(data.rates.TWD.toFixed(2)) }));
-      }
-    } catch (e) {
-      console.warn('Rate fetch failed', e);
-    }
-  }, []);
-
-  useEffect(() => {
-    fetchExchangeRate();
-  }, [fetchExchangeRate]);
-
   // 總覽的重新整理按鈕：資料、報價、匯率一起更新
   const refreshEverything = useCallback(async () => {
-    await Promise.all([loadAll(false).then(() => refreshPrices(true)), fetchExchangeRate()]);
-  }, [loadAll, refreshPrices, fetchExchangeRate]);
+    await loadAll(false);
+    await refreshPrices(true);
+  }, [loadAll, refreshPrices]);
 
   // ------------------------------------------------------------------------- //
   // Mutations: write to Supabase first, update local state only on success

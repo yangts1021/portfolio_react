@@ -18,6 +18,7 @@ import {
   getColorClass,
 } from '../../utils/calculations';
 import {
+  FX_SYMBOL,
   PriceQuoteMeta,
   QuoteFreshnessLevel,
   calculateDayPnL,
@@ -238,6 +239,11 @@ const OverviewTab: React.FC<OverviewTabProps> = (props) => {
     props.splitEvents,
   ]);
 
+  const fxMeta = props.priceMeta[FX_SYMBOL];
+  const fxTitle = fxMeta?.quoteTs
+    ? `${quoteSourceLabel(fxMeta.source)} · ${new Date(fxMeta.quoteTs).toLocaleString('zh-TW', { hour12: false })}`
+    : undefined;
+
   const bankSummary = useMemo(() => {
     const usd = props.bankData.reduce((sum, b) => sum + (b.usd || 0), 0);
     const twd = props.bankData.reduce((sum, b) => sum + (b.twd || 0), 0);
@@ -432,7 +438,10 @@ const OverviewTab: React.FC<OverviewTabProps> = (props) => {
           </div>
         </div>
         <div className='relative col-span-2 md:col-span-1 bg-white dark:bg-gray-900 p-3 md:p-5 rounded-xl shadow-sm border border-gray-100 dark:border-gray-800 text-center transition-colors'>
-          <div className='absolute top-2 right-3 text-[10px] md:text-xs font-mono text-gray-400 dark:text-gray-500'>
+          <div
+            className='absolute top-2 right-3 text-[10px] md:text-xs font-mono text-gray-400 dark:text-gray-500'
+            title={fxTitle}
+          >
             USD/TWD {props.exchangeRates.USD.toFixed(2)}
           </div>
           <div className='text-gray-500 dark:text-gray-400 text-xs md:text-sm uppercase tracking-wider mb-1 md:mb-2 font-medium'>

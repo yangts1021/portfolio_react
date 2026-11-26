@@ -62,7 +62,7 @@ TW_CURRENCIES = {'TWD'}
 @dataclass
 class Quote:
     symbol: str
-    market: str          # "tw" | "us"
+    market: str          # "tw" | "us" | "fx"
     name: str
     price: float
     prev_close: float | None
@@ -128,8 +128,12 @@ def save_quotes(conn: sqlite3.Connection, quotes: list[Quote]) -> None:
     conn.commit()
 
     # 順手記當日收盤：盤中每輪覆寫，收盤後最後一輪留下來的就是收盤價
+    # 匯率記到 daily_fx 而不是 daily_close，與 backfill_history.py 同一張表
     pricedb.upsert_daily_close(
-        conn, [(q.symbol, q.quote_ts[:10], q.price, q.source) for q in fresh]
+        conn, [(q.symbol, q.quote_ts[:10], q.price, q.source) for q in fresh if q.market != 'fx']
+    )
+    pricedb.upsert_daily_fx(
+        conn, [(q.quote_ts[:10], q.price, q.source) for q in fresh if q.market == 'fx']
     )
 
 
@@ -396,6 +400,31 @@ def fetch_us(symbols: list[str]) -> dict[str, Quote]:
     return out
 
 
+FX_SYMBOL = 'USDTWD'  # 寫進 quotes 的代號；網頁用同一個代號讀
+FX_TICKER = 'TWD=X'   # yfinance 的 USD/TWD
+
+
+def fetch_fx() -> Quote | None:
+    """USD/TWD 匯率，跟報價一起寫進 quotes，網頁不再自己連外部匯率服務"""
+    try:
+        import yfinance as yf
+
+        info = yf.Ticker(FX_TICKER).fast_info
+        price = info.get('lastPrice') or info.get('last_price')
+        prev = info.get('previousClose') or info.get('previous_close')
+        if not price:
+            return None
+        return Quote(
+            symbol=FX_SYMBOL, market='fx', name='USD/TWD', price=float(price),
+            prev_close=float(prev) if prev else None, source='yfinance',
+            quote_ts=datetime.now(timezone.utc).astimezone(TPE).isoformat(timespec='seconds'),
+            stale=False,
+        )
+    except Exception as exc:  # noqa: BLE001
+        print(f'[fx] {FX_TICKER} 抓取失敗：{exc}', file=sys.stderr)
+        return None
+
+
 # --------------------------------------------------------------------------- #
 # 寫回 Supabase
 # --------------------------------------------------------------------------- #
@@ -416,12 +445,17 @@ def push_to_supabase(client, quotes: dict[str, Quote]) -> None:
         for q in quotes.values()
     ], 'symbol')
 
-    fresh = [q for q in quotes.values() if not q.stale]
+    fresh = [q for q in quotes.values() if not q.stale and q.market != 'fx']
     if fresh:
         client.upsert('daily_close', [
             {'symbol': q.symbol, 'date': q.quote_ts[:10], 'close': q.price, 'source': q.source}
             for q in fresh
         ], 'symbol,date')
+    fx = [q for q in quotes.values() if not q.stale and q.market == 'fx']
+    if fx:
+        client.upsert('daily_fx', [
+            {'date': q.quote_ts[:10], 'usdtwd': q.price, 'source': q.source} for q in fx
+        ], 'date')
 
 
 # --------------------------------------------------------------------------- #
@@ -490,8 +524,13 @@ def main() -> int:
     # --- 美股 ---
     quotes.update(fetch_us(us_symbols))
 
+    # --- 匯率 ---
+    fx = fetch_fx()
+    if fx:
+        quotes[FX_SYMBOL] = fx
+
     # --- 最後手段：最後已知價 ---
-    for sym in tw_symbols + us_symbols:
+    for sym in tw_symbols + us_symbols + [FX_SYMBOL]:
         if sym not in quotes:
             cached = load_cached(conn, sym)
             if cached:
