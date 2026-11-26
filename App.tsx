@@ -10,7 +10,7 @@ import {
   Book,
 } from './types';
 import { STORAGE_KEYS, LEGACY_STORAGE_KEYS } from './constants';
-import { FX_SYMBOL, isMarketHours, PriceQuoteMeta } from './utils/marketData';
+import { FX_SYMBOLS, isMarketHours, PriceQuoteMeta } from './utils/marketData';
 import { supabase } from './utils/supabase';
 import * as db from './utils/db';
 import Navbar, { BottomTabs } from './components/Layout/Navbar';
@@ -273,9 +273,15 @@ const PortfolioApp: React.FC<PortfolioAppProps> = ({ isDarkMode, setIsDarkMode, 
     async (isSilent = false) => {
       const symbols = priceSymbolsKey ? priceSymbolsKey.split(',') : [];
       try {
-        const { prices, meta } = await db.loadQuotes([...symbols, FX_SYMBOL]);
-        const { [FX_SYMBOL]: usdTwd, ...holdingPrices } = prices;
-        if (usdTwd) setExchangeRates((prev) => ({ ...prev, USD: usdTwd }));
+        const { prices, meta } = await db.loadQuotes([...symbols, ...Object.keys(FX_SYMBOLS)]);
+        const rates: ExchangeRates = {};
+        const holdingPrices: Record<string, number> = {};
+        Object.entries(prices).forEach(([sym, price]) => {
+          const ccy = FX_SYMBOLS[sym as keyof typeof FX_SYMBOLS];
+          if (ccy) rates[ccy] = price;
+          else holdingPrices[sym] = price;
+        });
+        if (Object.keys(rates).length > 0) setExchangeRates((prev) => ({ ...prev, ...rates }));
         setCurrentPrices((prev) => ({ ...prev, ...holdingPrices }));
         setPriceMeta((prev) => ({ ...prev, ...meta }));
         if (!isSilent) showToast('價格已更新');

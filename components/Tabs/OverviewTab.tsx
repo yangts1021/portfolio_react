@@ -18,7 +18,7 @@ import {
   getColorClass,
 } from '../../utils/calculations';
 import {
-  FX_SYMBOL,
+  USD_FX_SYMBOL,
   PriceQuoteMeta,
   QuoteFreshnessLevel,
   calculateDayPnL,
@@ -239,7 +239,7 @@ const OverviewTab: React.FC<OverviewTabProps> = (props) => {
     props.splitEvents,
   ]);
 
-  const fxMeta = props.priceMeta[FX_SYMBOL];
+  const fxMeta = props.priceMeta[USD_FX_SYMBOL];
   const fxTitle = fxMeta?.quoteTs
     ? `${quoteSourceLabel(fxMeta.source)} · ${new Date(fxMeta.quoteTs).toLocaleString('zh-TW', { hour12: false })}`
     : undefined;
