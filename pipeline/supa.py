@@ -10,16 +10,25 @@ import requests
 
 CHUNK = 500  # 單次寫入筆數；daily_close 有上萬筆，分批避免請求過大
 PAGE = 1000  # PostgREST 預設單次回傳上限
+TIMEOUT = (10, 60)  # (連線, 讀取) 秒；requests 預設不設逾時，連線卡住會讓排程永遠停在這一輪
 
 
 class SupabaseError(RuntimeError):
     pass
 
 
+class _TimeoutSession(requests.Session):
+    """每個請求都帶預設逾時，呼叫端另給 timeout 時以呼叫端為準"""
+
+    def request(self, *args, **kwargs):
+        kwargs.setdefault('timeout', TIMEOUT)
+        return super().request(*args, **kwargs)
+
+
 class Supabase:
     def __init__(self, url: str, service_key: str):
         self.url = url.rstrip('/')
-        self.session = requests.Session()
+        self.session = _TimeoutSession()
         self.session.headers.update({
             'apikey': service_key,
             'Authorization': f'Bearer {service_key}',

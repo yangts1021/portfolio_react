@@ -3,7 +3,6 @@ export type CurrencyType = 'TWD' | 'USD' | 'HKD' | 'JPY';
 // 'crypto' is parked until Pionex/Bitfinex data moves to Supabase
 export type TabType = 'transactions' | 'overview' | 'bank' | 'pledge';
 export type CryptoSubTab = 'pionex' | 'bitfinex';
-export type RateMode = 'manual' | 'auto';
 
 export interface Transaction {
   id: number;

@@ -6,12 +6,11 @@ import {
   BankAccount,
   PledgeRecord,
   SplitEvent,
-  RateMode,
   ExchangeRates,
   Book,
 } from './types';
 import { STORAGE_KEYS, LEGACY_STORAGE_KEYS } from './constants';
-import { isMarketHours, PriceQuoteMeta } from './utils/marketData';
+import { FX_SYMBOLS, isMarketHours, PriceQuoteMeta } from './utils/marketData';
 import { supabase } from './utils/supabase';
 import * as db from './utils/db';
 import Navbar, { BottomTabs } from './components/Layout/Navbar';
@@ -176,9 +175,6 @@ const PortfolioApp: React.FC<PortfolioAppProps> = ({ isDarkMode, setIsDarkMode, 
   const [exchangeRates, setExchangeRates] = useState<ExchangeRates>(() =>
     readCache(STORAGE_KEYS.RATES, { USD: 32.5, HKD: 4.1, JPY: 0.22, TWD: 1 }),
   );
-  const [rateMode, setRateMode] = useState<RateMode>(
-    () => (localStorage.getItem(STORAGE_KEYS.RATE_MODE) as RateMode) || 'auto',
-  );
 
   // UI State
   const [refreshing, setRefreshing] = useState(false);
@@ -193,7 +189,6 @@ const PortfolioApp: React.FC<PortfolioAppProps> = ({ isDarkMode, setIsDarkMode, 
   useEffect(() => writeCache(STORAGE_KEYS.PRICES, currentPrices), [currentPrices]);
   useEffect(() => writeCache(STORAGE_KEYS.PRICE_META, priceMeta), [priceMeta]);
   useEffect(() => writeCache(STORAGE_KEYS.RATES, exchangeRates), [exchangeRates]);
-  useEffect(() => localStorage.setItem(STORAGE_KEYS.RATE_MODE, rateMode), [rateMode]);
 
   const showToast = useCallback((msg: string) => {
     setToasts((prev) => [...prev, msg]);
@@ -273,14 +268,21 @@ const PortfolioApp: React.FC<PortfolioAppProps> = ({ isDarkMode, setIsDarkMode, 
   }, [transactions, pledgeData]);
   const priceSymbolsKey = priceSymbols.join(',');
 
-  // 即時價格：pipeline 每 3 分鐘寫進 Supabase quotes，這裡直接讀
+  // 即時價格與 USD/TWD 匯率：pipeline 每 3 分鐘寫進 Supabase quotes，這裡直接讀
   const refreshPrices = useCallback(
     async (isSilent = false) => {
       const symbols = priceSymbolsKey ? priceSymbolsKey.split(',') : [];
-      if (symbols.length === 0) return;
       try {
-        const { prices, meta } = await db.loadQuotes(symbols);
-        setCurrentPrices((prev) => ({ ...prev, ...prices }));
+        const { prices, meta } = await db.loadQuotes([...symbols, ...Object.keys(FX_SYMBOLS)]);
+        const rates: ExchangeRates = {};
+        const holdingPrices: Record<string, number> = {};
+        Object.entries(prices).forEach(([sym, price]) => {
+          const ccy = FX_SYMBOLS[sym as keyof typeof FX_SYMBOLS];
+          if (ccy) rates[ccy] = price;
+          else holdingPrices[sym] = price;
+        });
+        if (Object.keys(rates).length > 0) setExchangeRates((prev) => ({ ...prev, ...rates }));
+        setCurrentPrices((prev) => ({ ...prev, ...holdingPrices }));
         setPriceMeta((prev) => ({ ...prev, ...meta }));
         if (!isSilent) showToast('價格已更新');
       } catch (e) {
@@ -303,28 +305,11 @@ const PortfolioApp: React.FC<PortfolioAppProps> = ({ isDarkMode, setIsDarkMode, 
     return () => clearInterval(id);
   }, [refreshPrices]);
 
+  // 總覽的重新整理按鈕：資料、報價、匯率一起更新
   const refreshEverything = useCallback(async () => {
     await loadAll(false);
     await refreshPrices(true);
   }, [loadAll, refreshPrices]);
-
-  const fetchExchangeRate = useCallback(async () => {
-    if (rateMode !== 'auto') return;
-    try {
-      const res = await fetch('https://open.er-api.com/v6/latest/USD');
-      if (!res.ok) return;
-      const data = await res.json();
-      if (data?.rates?.TWD) {
-        setExchangeRates((prev) => ({ ...prev, USD: parseFloat(data.rates.TWD.toFixed(2)) }));
-      }
-    } catch (e) {
-      console.warn('Rate fetch failed', e);
-    }
-  }, [rateMode]);
-
-  useEffect(() => {
-    fetchExchangeRate();
-  }, [fetchExchangeRate]);
 
   // ------------------------------------------------------------------------- //
   // Mutations: write to Supabase first, update local state only on success
@@ -486,12 +471,8 @@ const PortfolioApp: React.FC<PortfolioAppProps> = ({ isDarkMode, setIsDarkMode, 
               bankData={bankData}
               pledgeData={pledgeData}
               splitEvents={splitEvents}
-              rateMode={rateMode}
-              setRateMode={setRateMode}
-              setExchangeRates={setExchangeRates}
               onRefresh={refreshEverything}
               onBetaChange={handleBetaUpdate}
-              onRefreshRate={fetchExchangeRate}
               isDarkMode={isDarkMode}
               hideAmounts={hideAmounts}
             />

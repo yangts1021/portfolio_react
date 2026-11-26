@@ -9,6 +9,10 @@ export interface PriceQuoteMeta {
   fetchedAt?: string; // pipeline 這一輪寫入的時間；判斷抓價程式是否還在跑要看這個
 }
 
+// 外幣兌台幣匯率在 Supabase quotes 裡的代號 → 幣別，由 pipeline 的 fetch_prices.py 寫入
+export const FX_SYMBOLS = { USDTWD: 'USD', HKDTWD: 'HKD', JPYTWD: 'JPY' } as const;
+export const USD_FX_SYMBOL = 'USDTWD';
+
 // 單檔來源顯示用的短標籤
 export const QUOTE_SOURCE_LABEL: Record<string, string> = {
   fubon: '富邦',

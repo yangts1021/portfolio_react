@@ -38,7 +38,7 @@ React 18 + TypeScript SPA for investment portfolio tracking. UI is in Traditiona
 **Tabs:**
 
 - `TransactionsTab` — Add/view buy/sell records, sorted display with "show all" toggle
-- `OverviewTab` — Portfolio analysis: P&L table, pie chart (Recharts), cash summary, exchange rates, beta-weighted allocation, asset/P&L history curve (`components/UI/HistoryChart.tsx`, from `nav_history`)
+- `OverviewTab` — Portfolio analysis: net worth card with asset/liability breakdown (bank balance shows TWD + USD and the USD/TWD rate), P&L row with total return %, asset/P&L history curve (`components/UI/HistoryChart.tsx`, from `nav_history`), holdings P&L table, pie chart (Recharts) and beta-weighted allocation
 - `BankTab` — Multi-currency bank account management with inline editing
 - `PledgeTab` — Stock pledge/collateral loan tracking with auto-calculated repayment dates; collateral value is computed from live prices, not stored
 - Crypto (`CryptoTab` / `PionexTab` / `BitfinexTab`) is unwired until Pionex/Bitfinex data moves from GAS into Supabase `crypto_positions`
@@ -49,7 +49,7 @@ Local Python scripts that feed Supabase. **The web app never talks to brokers or
 
 | Script | Does | Reads | Writes to |
 | --- | --- | --- | --- |
-| `fetch_prices.py` | Holding quotes | Supabase `transactions`, `pledges` | `prices.db` + Supabase `quotes`, `daily_close` |
+| `fetch_prices.py` | Holding quotes, plus USD/HKD/JPY→TWD rates (yfinance `TWD=X`, `HKDTWD=X`, `JPYTWD=X`) as `quotes` symbols `USDTWD` / `HKDTWD` / `JPYTWD` | Supabase `transactions`, `pledges` | `prices.db` + Supabase `quotes`, `daily_close` (`daily_fx` for USD/TWD only) |
 | `backfill_history.py` | Backfills daily closes and FX: TW from TWSE/TPEx (`tw_exchange.py`), US and FX via yfinance | Supabase `transactions` | `prices.db` + Supabase `daily_close`, `daily_fx` |
 | `build_history.py` | Recomputes the asset/P&L curve from daily closes | Supabase `transactions`, `split_events`; `prices.db` daily closes/FX | Supabase `nav_history` |
 | `sync_fubon.py` | Fubon positions, last-30-day fills, unrealized P&L snapshot; settlement balance via `bank_remain` | Fubon API | Sheet 「富邦庫存」「富邦交易紀錄」「富邦持倉快照」 + Supabase `bank_accounts` row with `auto_source = 'fubon'` (TWD only) |
@@ -74,7 +74,7 @@ Quote rows carry `source` and `quote_ts` so the UI can show freshness instead of
 
 **History curve:** the curve itself is never treated as a source — only `daily_close` and `daily_fx` are, and `build_history.py` recomputes every day's value from the transaction log, so backfilling an old trade or adding a split event fixes history instead of leaving it wrong forever. It reads daily closes from `prices.db` and writes `nav_history` by upserting every date and then deleting the dates this run did not produce, so the web never sees an empty curve. `fetch_prices.py` overwrites today's `daily_close` each round, so the last run after the close leaves the closing price; `backfill_history.py` is for first-time history or gaps from days the Mac was off. **Unit gotcha:** Yahoo's historical closes are retroactively split-adjusted, so `build_history.py` converts every quantity into *current* share units (a share held on date D equals R(D) current shares, where R(D) is the product of ratios of splits after D) before multiplying by the close. Read `pipeline/README.md` before touching that math. **TW never uses Yahoo:** TW closes come from TWSE (上市) / TPEx (上櫃) monthly per-stock data, stored as `twse_hist` / `tpex_hist` — actual traded prices in that day's units, which `build_history.py` divides by R(D) like intraday rows; replacing a symbol with exchange data deletes its old Yahoo rows, and months already stored are skipped so the daily run only fetches the last month or two. **After a new split event** (US symbols) the `yfinance_hist` closes already in `prices.db` are still pre-split, and Yahoo often lags a few days on TW ETFs, so `backfill_history.py` re-downloads the whole history of any symbol that split within 60 days and divides still-unadjusted closes by the ratio before writing (`splits.py` looks for the ratio-sized jump up to 30 days before the effective date, because Yahoo sometimes adjusts only the last few days). **Splits dated in the future are ignored everywhere** (pipeline and web: `effectiveSplits()` in `utils/calculations.ts`) — the effective date must be the day trading resumes at the new price, not the start of the pre-split halt.
 
-**Read path:** the web app reads Supabase `quotes` directly (60s polling in `App.tsx`). The old GAS `?type=twPrices` chain (「即時報價」 → TWSE MIS → GOOGLEFINANCE) is no longer used.
+**Read path:** the web app reads Supabase `quotes` directly (60s polling in `App.tsx`), including the FX rates under `FX_SYMBOLS` (`utils/marketData.ts`); there is no manual rate entry and no browser-side FX API. The old GAS `?type=twPrices` chain (「即時報價」 → TWSE MIS → GOOGLEFINANCE) is no longer used.
 
 **Multi-book:** the book list comes from Supabase `books`. Quotes and daily closes are keyed by symbol/date and therefore shared across books: holdings are unioned, fetched once, written to the shared `quotes` / `daily_close`, and each book gets its own `nav_history`. `--profile <name>` limits a run to one book and refers to `books.name`. `config.json`'s `profiles` list is now only used by the broker syncs to reach the Sheet; the first profile's `name` must match the main book's `books.name` (the auto-updated settlement balance goes to that book). Broker syncs only make sense for that first profile since they use the configured API keys.
 
@@ -91,7 +91,7 @@ See `pipeline/README.md` for commands and setup detail.
 - Prettier: single quotes, trailing commas, 100 char line width, 2-space indent
 - ESLint extends: eslint:recommended, @typescript-eslint/recommended, react-hooks/recommended, prettier
 - Tailwind CSS via CDN (class-based dark mode with `dark:` prefix)
-- Mobile layout: below the `md` breakpoint the tabs move to a bottom bar (`BottomTabs` in `components/Layout/Navbar.tsx`) and every data table is replaced by a card list — the pattern is a `md:hidden` card list next to a `hidden md:block` table, so a new column must be added to both. `OverviewTab` reorders its sections on phones with `order-*` classes (net worth and P&L first). Inputs are forced to 16px on phones in `index.html` to stop iOS zooming on focus
+- Mobile layout: below the `md` breakpoint the tabs move to a bottom bar (`BottomTabs` in `components/Layout/Navbar.tsx`) and every data table is replaced by a card list — the pattern is a `md:hidden` card list next to a `hidden md:block` table, so a new column must be added to both. `OverviewTab` uses one section order on every screen size (freshness → net worth with assets/liabilities → P&L row → history curve → holdings → allocation/Beta), so there are no `order-*` overrides. Inputs are forced to 16px on phones in `index.html` to stop iOS zooming on focus
 - Path alias: `@/` maps to project root
 
 ## Build Configuration

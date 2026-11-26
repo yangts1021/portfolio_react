@@ -24,6 +24,7 @@
 from __future__ import annotations
 
 import argparse
+import signal
 import sqlite3
 import sys
 import time
@@ -61,7 +62,7 @@ TW_CURRENCIES = {'TWD'}
 @dataclass
 class Quote:
     symbol: str
-    market: str          # "tw" | "us"
+    market: str          # "tw" | "us" | "fx"
     name: str
     price: float
     prev_close: float | None
@@ -127,8 +128,12 @@ def save_quotes(conn: sqlite3.Connection, quotes: list[Quote]) -> None:
     conn.commit()
 
     # 順手記當日收盤：盤中每輪覆寫，收盤後最後一輪留下來的就是收盤價
+    # 匯率記到 daily_fx 而不是 daily_close，與 backfill_history.py 同一張表
     pricedb.upsert_daily_close(
-        conn, [(q.symbol, q.quote_ts[:10], q.price, q.source) for q in fresh]
+        conn, [(q.symbol, q.quote_ts[:10], q.price, q.source) for q in fresh if q.market != 'fx']
+    )
+    pricedb.upsert_daily_fx(
+        conn, [(q.quote_ts[:10], q.price, q.source) for q in fresh if q.symbol == USD_FX_SYMBOL]
     )
 
 
@@ -395,6 +400,42 @@ def fetch_us(symbols: list[str]) -> dict[str, Quote]:
     return out
 
 
+# 寫進 quotes 的代號 → yfinance 代號；網頁用同樣的代號讀（utils/marketData.ts FX_SYMBOLS）
+FX_TICKERS = {
+    'USDTWD': 'TWD=X',
+    'HKDTWD': 'HKDTWD=X',
+    'JPYTWD': 'JPYTWD=X',
+}
+USD_FX_SYMBOL = 'USDTWD'  # daily_fx 只存 USD/TWD（淨值曲線只換算美股）
+
+
+def fetch_fx() -> dict[str, Quote]:
+    """外幣兌台幣匯率，跟報價一起寫進 quotes，網頁不再自己連外部匯率服務"""
+    try:
+        import yfinance as yf
+    except ImportError:
+        print('[fx] 未安裝 yfinance', file=sys.stderr)
+        return {}
+
+    out: dict[str, Quote] = {}
+    for sym, ticker in FX_TICKERS.items():
+        try:
+            info = yf.Ticker(ticker).fast_info
+            price = info.get('lastPrice') or info.get('last_price')
+            prev = info.get('previousClose') or info.get('previous_close')
+            if not price:
+                continue
+            out[sym] = Quote(
+                symbol=sym, market='fx', name=f'{sym[:3]}/TWD', price=float(price),
+                prev_close=float(prev) if prev else None, source='yfinance',
+                quote_ts=datetime.now(timezone.utc).astimezone(TPE).isoformat(timespec='seconds'),
+                stale=False,
+            )
+        except Exception as exc:  # noqa: BLE001
+            print(f'[fx] {ticker} 抓取失敗：{exc}', file=sys.stderr)
+    return out
+
+
 # --------------------------------------------------------------------------- #
 # 寫回 Supabase
 # --------------------------------------------------------------------------- #
@@ -415,17 +456,25 @@ def push_to_supabase(client, quotes: dict[str, Quote]) -> None:
         for q in quotes.values()
     ], 'symbol')
 
-    fresh = [q for q in quotes.values() if not q.stale]
+    fresh = [q for q in quotes.values() if not q.stale and q.market != 'fx']
     if fresh:
         client.upsert('daily_close', [
             {'symbol': q.symbol, 'date': q.quote_ts[:10], 'close': q.price, 'source': q.source}
             for q in fresh
         ], 'symbol,date')
+    fx = [q for q in quotes.values() if not q.stale and q.symbol == USD_FX_SYMBOL]
+    if fx:
+        client.upsert('daily_fx', [
+            {'date': q.quote_ts[:10], 'usdtwd': q.price, 'source': q.source} for q in fx
+        ], 'date')
 
 
 # --------------------------------------------------------------------------- #
 # main
 # --------------------------------------------------------------------------- #
+
+ROUND_LIMIT_SEC = 150  # 排程每 180 秒一輪，單輪超過這個時間就放棄
+
 
 def main() -> int:
     parser = argparse.ArgumentParser()
@@ -443,6 +492,10 @@ def main() -> int:
 
     if args.market_hours_only and not (tw_market_open() or us_market_open()):
         return 0
+    if args.market_hours_only:
+        # launchd 在上一輪還沒結束時不會再啟動新的一輪，任何一個請求卡住就會讓報價停更好幾天
+        # （2026-11 曾卡在 SSL read 20 天）。給整輪一個上限，超過就結束，下一輪重新來過
+        signal.alarm(ROUND_LIMIT_SEC)
 
     config = load_config()
     # 指定標的又不寫遠端時，完全不需要 Supabase
@@ -482,8 +535,11 @@ def main() -> int:
     # --- 美股 ---
     quotes.update(fetch_us(us_symbols))
 
+    # --- 匯率 ---
+    quotes.update(fetch_fx())
+
     # --- 最後手段：最後已知價 ---
-    for sym in tw_symbols + us_symbols:
+    for sym in tw_symbols + us_symbols + list(FX_TICKERS):
         if sym not in quotes:
             cached = load_cached(conn, sym)
             if cached:

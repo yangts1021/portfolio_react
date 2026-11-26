@@ -18,7 +18,6 @@ export const STORAGE_KEYS = {
   BETAS: 'my_symbol_betas',
   SPLITS: 'my_split_events',
   RATES: 'my_exchange_rates',
-  RATE_MODE: 'my_rate_mode',
 };
 
 // Keys from the Google Sheet era, removed on startup
@@ -30,4 +29,5 @@ export const LEGACY_STORAGE_KEYS = [
   'my_gas_url',
   'my_pionex_data',
   'my_bitfinex_data',
+  'my_rate_mode', // manual rate entry was removed; the rate is always fetched
 ];
